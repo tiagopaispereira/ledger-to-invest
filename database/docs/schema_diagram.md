@@ -4,7 +4,7 @@ The LTI (Ledger-To-Invest) application uses a PostgreSQL database with a compreh
 
 This document provides a high-level Entity-Relationship (ER) diagram for the Ledger-To-Invest (LTI) application's database. Its purpose is to give developers a quick visual overview of the database structure, the main entities, and how they relate to one another.
 
-For a detailed breakdown of each table and its business logic, see `table-relationship.md`. For guides on performing common operations, see `workflows.md`.
+For a detailed breakdown of each table and its business logic, see `table-relationship.md`.
 
 ## Complete Entity Relationship Diagram
 
@@ -211,7 +211,7 @@ erDiagram
     }
     
     %% Budget Tracking
-    monthly_budgets {
+    budgets {
         int id PK
         int ledger_id FK
         date budget_month
@@ -219,8 +219,8 @@ erDiagram
         timestamp updated_at
     }
     
-    category_budget_amounts {
-        int monthly_budget_id PK, FK
+    category_budgets {
+        int budget_id PK, FK
         int category_id PK, FK
         numeric budgeted_amount
         timestamp created_at
@@ -242,7 +242,7 @@ erDiagram
     ledgers ||--o{ category_groups : "organizes"
     ledgers ||--o{ assets : "tracks"
     ledgers ||--o{ payees : "manages"
-    ledgers ||--o{ monthly_budgets : "planned"
+    ledgers ||--o{ budgets : "planned"
     
     account_types ||--o{ accounts : "defines"
     accounts ||--o{ transactions : "records"
@@ -254,7 +254,7 @@ erDiagram
     category_groups ||--o{ categories : "groups"
     categories ||--o{ goals : "targets"
     categories ||--o{ category_transactions : "categorizes"
-    categories ||--o{ category_budget_amounts : "budgeted"
+    categories ||--o{ category_budgets : "budgeted"
     
     goal_types ||--o{ goals : "defines"
     
@@ -266,7 +266,7 @@ erDiagram
     transactions ||--|| transfers : "to_transaction"
     transactions ||--|| asset_transactions : "details"
     
-    monthly_budgets ||--o{ category_budget_amounts : "allocates"
+    budgets ||--o{ category_budgets : "allocates"
 ```
 
 ## Functional Layer Overview
@@ -318,8 +318,8 @@ graph TB
     end
     
     subgraph "Budget Layer"
-        T[monthly_budgets]
-        U[category_budget_amounts]
+        T[budgets]
+        U[category_budgets]
     end
     
     %% Layer Dependencies
@@ -433,7 +433,7 @@ flowchart LR
 - **Total Tables**: 22
   - **Core Entity Tables**: 13
   - **Lookup Tables**: 5 (date_formats, currencies, account_types, asset_types, goal_types)
-  - **Junction Tables**: 4 (currency_exchange_rates, category_budget_amounts, category_transactions, transfers)
+  - **Junction Tables**: 4 (currency_exchange_rates, category_budgets, category_transactions, transfers)
 - **Indexes**: 18 performance indexes
 - **Triggers**: 22 update timestamp triggers + 9 validation triggers
 - **Functions**: 5 validation functions
