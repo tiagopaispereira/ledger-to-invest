@@ -2,11 +2,11 @@
 
 ## Overview
 
-This document details all foreign key relationships, constraints, and business rules in the LTI database schema. The relationships are organized by functional areas and include cardinality information.
+This document details all foreign key relationships, constraints, validation functions, and business rules in the LTI (Ledger-To-Invest) database schema. The relationships are organized by functional areas and include cardinality information, check constraints, and trigger-based validations.
 
 ## Entity Relationship Hierarchy
 
-The diagram is organized into functional areas: Core Network, Transaction Netwoek, Budget Network and Configuration.
+The diagram is organized into functional areas: Core Network, Transaction Network, Budget Network and Configuration.
 
 ```mermaid
 graph LR
@@ -111,7 +111,7 @@ erDiagram
         int from_currency_id PK, FK
         int to_currency_id PK, FK
         date date PK
-        numeric rate
+        numeric rate "NUMERIC(18,6)"
         timestamp created_at
         timestamp updated_at
     }
@@ -123,38 +123,28 @@ erDiagram
     currencies ||--o{ currency_exchange_rates : "to_currency (1:M)"
 ```
 
-- **Relationship**:
+- **Relationships**:
   - One user can have multiple ledgers
-  - Each ledger uses only one date format
-  - Each ledger uses only one currency
-  - One currency can be used multiple times in exchange rate
-- **Foreign Key**:
-  - `ledgers.user_id → users.id`
+  - Each ledger uses one date format and one currency
+  - Currency exchange rates use composite primary key for rate history
+- **Foreign Keys**:
+  - `ledgers.user_id → users.id` (CASCADE DELETE)
   - `ledgers.date_format_id → date_formats.id`
   - `ledgers.currency_id → currencies.id`
   - `currency_exchange_rates.from_currency_id → currencies.id`
   - `currency_exchange_rates.to_currency_id → currencies.id`
-- **Cascade**:
-  - Deleting user removes all ledgers
-- **Business Rules:**
-  - User `Username` must be unique in system
-  - User `Email` must be unique in system
-  - Ledger `tag` must be unique per user: `UNIQUE(user_id, tag)`
-  - Data format `tag` must be unique in system
-  - Currency `code` must be unique in system
-  - One rate per currency pair per date: `UNIQUE(from_currency_id, to_currency_id, date)`
-  - Cannot have exchange rate to same currency: `from_currency_id ≠ to_currency_id`
-- **Additional Constraints:**
-  - Users `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Users `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_users_updated_at`)
-  - Date_formats `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Date_formats `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_date_formats_updated_at`)
-  - Currencies `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Currencies `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_currencies_updated_at`)
-  - Ledgers `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Ledgers `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_ledgers_updated_at`)
-  - Currency_exchange_rates `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Currency_exchange_rates `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_currency_exchange_rates_updated_at`)
+- **Composite Primary Keys**:
+  - `currency_exchange_rates(from_currency_id, to_currency_id, date)` - one rate per currency pair per date
+- **Unique Constraints**:
+  - `users.username` - system-wide unique usernames
+  - `users.email` - system-wide unique emails
+  - `date_formats.tag` - system-wide unique format identifiers
+  - `currencies.code` - system-wide unique currency codes
+  - `ledgers(user_id, tag)` - unique ledger names per user
+- **Check Constraints**:
+  - `check_different_currencies`: `from_currency_id ≠ to_currency_id`
+- **Triggers**:
+  - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
 ### Ledger-Account Structure
 
@@ -212,24 +202,21 @@ erDiagram
 
 - **Relationships**:
   - One ledger can have multiple accounts
-  - Each account is only one account type
-  - Each account uses only one currency
+  - Each account has one account type and one currency
 - **Foreign Keys**:
-  - `accounts.ledger_id → ledgers.id`
+  - `accounts.ledger_id → ledgers.id` (CASCADE DELETE)
   - `accounts.account_type_id → account_types.id`
   - `accounts.currency_id → currencies.id`
-- **Cascade**:
-  - Deleting ledger removes all accounts
-- **Business Rules:**
-  - Account `tag` must be unique per ledger: `UNIQUE(ledger_id, tag)`
-  - Asset accounts (`is_asset_account = TRUE`) must have `can_invest = TRUE` account type
-  - `can_invest` and `on_budget_account` cannot both be true
-  - Account type `tag` must be unique in System
-- **Additional Constraints:**
-  - Account_types `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Account_types `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_account_types_updated_at`)
-  - Accounts `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Accounts `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_accounts_updated_at`)
+- **Unique Constraints**:
+  - `account_types.tag` - system-wide unique account type identifiers
+  - `accounts(ledger_id, tag)` - unique account names per ledger
+- **Check Constraints**:
+  - `check_can_invest`: `NOT(can_invest AND on_budget_account)` - investment accounts cannot be on-budget
+- **Validation Functions**:
+  - `check_investment_account_type()`: Asset accounts (`is_asset_account = TRUE`) must have `can_invest = TRUE` account type
+- **Triggers**:
+  - Validation trigger for `check_investment_account_type()` before `insert` or `update` on accounts
+  - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
 ### Ledger-Asset Structure
 
@@ -265,10 +252,9 @@ erDiagram
     }
     
     asset_prices {
-        int id PK
-        int asset_id FK
-        date date
-        numeric price
+        int asset_id PK, FK
+        date date PK
+        numeric price "NUMERIC(18,6)"
         timestamp created_at
         timestamp updated_at
     }
@@ -294,29 +280,22 @@ erDiagram
 ```
 
 - **Relationships**:
-  - One ledger can have multiple assets
-  - Every asset is only one asset type
-  - Each asset uses only one currency
-  - One asset can have multiple price records
+  - One ledger can track multiple assets
+  - Each asset has one type and one currency
+  - Assets can have multiple price records (historical pricing)
 - **Foreign Keys**:
-  - `assets.ledger_id → ledgers.id`
+  - `assets.ledger_id → ledgers.id` (CASCADE DELETE)
   - `assets.asset_type_id → asset_types.id`
   - `assets.currency_id → currencies.id`
-  - `asset_prices.asset_id → assets.id`
-- **Cascade**:
-  - Deleting ledger removes all assets
-  - Deleting asset removes all price records
-- **Business Rules:**:
-  - Asset `symbol` must be unique per ledger: `UNIQUE(ledger_id, symbol)`
-  - Asset `tag` must be unique per ledger: `UNIQUE(ledger_id, tag)`
-  - One price per asset per date: `UNIQUE(asset_id, date)`
-- **Additional Constraints:**
-  - Asset_types `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Asset_types `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_asset_types_updated_at`)
-  - Assets `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Assets `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_assets_updated_at`)
-  - Asset_prices `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Asset_prices `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_asset_prices_updated_at`)
+  - `asset_prices.asset_id → assets.id` (CASCADE DELETE)
+- **Composite Primary Keys**:
+  - `asset_prices(asset_id, date)` - one price per asset per date
+- **Unique Constraints**:
+  - `asset_types.tag` - system-wide unique asset type identifiers
+  - `assets(ledger_id, symbol)` - unique asset symbols per ledger
+  - `assets(ledger_id, tag)` - unique asset names per ledger
+- **Triggers**:
+  - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
 ### Ledger-Category Structure
 
@@ -356,25 +335,19 @@ erDiagram
     category_groups ||--o{ categories : "groups (1:M)"
 ```
 
-- **Relationship**:
+- **Relationships**:
   - One ledger can have multiple category groups
-  - One category group can have multiple categories
+  - One category group can contain multiple categories
 - **Foreign Keys**:
-  - `category_groups.ledger_id → ledgers.id`
-  - `categories.category_group_id → category_groups.id`
-- **Cascade**:
-  - Deleting ledger removes all category groups
-  - Deleting category group removes all categories
-- **Business Rules:**:
-  - Category group `tag` must be unique per ledger: `UNIQUE(ledger_id, tag)`
-  - Sort order for each category group must be unique per ledger: `UNIQUE(ledger_id, sort_order)`
-  - Category `tag` must be unique per category group: `UNIQUE(category_group_id, tag)`
-  - Sort order for each category must be unique per category group: `UNIQUE(category_group_id, sort_order)`
-- **Additional Constraints:**
-  - Category_groups `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Category_groups `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_category_groups_updated_at`)
-  - Categories `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Categories `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_categories_updated_at`)
+  - `category_groups.ledger_id → ledgers.id` (CASCADE DELETE)
+  - `categories.category_group_id → category_groups.id` (CASCADE DELETE)
+- **Unique Constraints**:
+  - `category_groups(ledger_id, tag)` - unique group names per ledger
+  - `category_groups(ledger_id, sort_order)` - unique sort order per ledger
+  - `categories(category_group_id, tag)` - unique category names per group
+  - `categories(category_group_id, sort_order)` - unique sort order per group
+- **Triggers**:
+  - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
 ### Ledger-Payee Structure
 
@@ -402,17 +375,14 @@ erDiagram
     ledgers ||--o{ payees : "manages (1:M)"
 ```
 
-- **Relationship**:
-  - One ledger can have multiple payees
+- **Relationships**:
+  - One ledger can manage multiple payees
 - **Foreign Keys**:
-  - `payees.ledger_id → ledgers.id`
-- **Cascade**:
-  - Deleting ledger removes all payees
-- **Business Rules:**:
-  - Payees `tag` must be unique per ledger: `UNIQUE (ledger_id, tag)`
-- **Additional Constraints:**
-  - Payees `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Payees `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_payees_updated_at`)
+  - `payees.ledger_id → ledgers.id` (CASCADE DELETE)
+- **Unique Constraints**:
+  - `payees(ledger_id, tag)` - unique payee names per ledger
+- **Triggers**:
+  - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
 ## Transaction Network
 
@@ -436,7 +406,7 @@ erDiagram
         int id PK
         int account_id FK
         date date
-        numeric amount
+        numeric amount "NUMERIC(18,2)"
         text memo
         boolean cleared
         timestamp created_at
@@ -455,7 +425,7 @@ erDiagram
     category_transactions {
         int transaction_id PK, FK
         int category_id PK, FK
-        numeric amount
+        numeric amount "NUMERIC(18,2)"
         timestamp created_at
         timestamp updated_at
     }
@@ -482,37 +452,29 @@ erDiagram
     transactions ||--|| payee_transactions : "receive/send (1:1)"
 ```
 
-- **Relationship**:
-  - Each transaction belongs only to one account
-  - One transaction can splits into multiple categories
-  - Each transaction can only be from/to one payee
+- **Relationships**:
+  - Each transaction belongs to one account
+  - Transactions can split across multiple categories
+  - Each transaction can optionally reference one payee
 - **Foreign Keys**:
-  - `transactions.account_id → accounts.id`
-  - `category_transactions.transaction_id → transactions.id`
-  - `category_transactions.category_id → categories.id`
-  - `payee_transactions.transaction_id → transactions.id`
-  - `category_transactions.payee_id → payees.id`
-- **Cascade**:
-  - Deleting account removes all transactions
-  - Deleting transaction removes all category_transactions
-  - Deleting category removes all category_transactions
-  - Deleting transaction removes all payee_transactions
-  - Deleting payee removes all payee_transactions
-- **Business Rules**:
-  - Transactions `amount` cannot be zero
-  - Category_transactions `amount` cannot be zero
-  - Sum of Category_transactions `amount` must equal transactions `amount`
-  - Category_transactions `category` should be associated with the same ledger from transaction account
-  - Payee_transactions `payee` should be associated with the same ledger from transaction account
-- **Additional Constraints:**
-  - Transactions `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Transactions `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_transactions_updated_at`)
-  - Category_transactions `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Category_transactions `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_category_transactions_updated_at`)
-  - Payee_transactions `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Payee_transactions `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_payee_transactions_updated_at`)
+  - `transactions.account_id → accounts.id` (CASCADE DELETE)
+  - `category_transactions.transaction_id → transactions.id` (CASCADE DELETE)
+  - `category_transactions.category_id → categories.id` (CASCADE DELETE)
+  - `payee_transactions.transaction_id → transactions.id` (CASCADE DELETE)
+  - `payee_transactions.payee_id → payees.id` (CASCADE DELETE)
+- **Composite Primary Keys**:
+  - `category_transactions(transaction_id, category_id)` - one amount per category per transaction
+- **Check Constraints**:
+  - `check_transactions_amount`: `amount ≠ 0` - transactions cannot have zero amount
+  - `check_category_transactions_amount`: `amount ≠ 0` - category transaction splits cannot have zero amount
+- **Validation Functions**:
+  - `check_category_transaction_valid()`: Sum of category transaction amounts must equal parent transaction amount
+- **Triggers**:
+  - Validation trigger for `check_category_transaction_valid()` after `insert`, `update` or `delete` on category_transactions
+  - Validation trigger for `check_category_transaction_valid()` after `update` on transactions when amount changes
+  - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
-### Transfer Transaction Struture
+### Transfer Transaction Structure
 
 ```mermaid
 erDiagram
@@ -521,7 +483,7 @@ erDiagram
         int id PK
         int account_id FK
         date date
-        numeric amount
+        numeric amount "NUMERIC(18,2)"
         text memo
         boolean cleared
         timestamp created_at
@@ -539,27 +501,33 @@ erDiagram
     transactions ||--|| transfers : "to_transaction (1:1)"
 ```
 
-- **Relationship**:
-  - Each transfers contains two equivalent transactions
+- **Relationships**:
+  - Each transfer links exactly two transactions
+  - Each transaction can be part of at most one transfer
 - **Foreign Keys**:
-  - `transfers.from_transaction_id → transactions.id`
-  - `transfers.to_transaction_id → transactions.id`
-- **Cascade**:
-  - Deleting transaction removes all transfers
-- **Business Rules**:
-  - Transfer `from_transaction_id` must be unique in system
-  - Transfer `to_transaction_id` must be unique in system
-  - Cannot have tranfer to same transaction: `from_transaction_id ≠ to_transaction_id`
-  - Transferred transactions can only be associated with one transfer
-  - Transferred transactions from/to the same account not allowed
-  - Transferred transactions can only be associated with accounts from the same ledger
-  - Transfer transactions must sum to zero (opposite amounts)
-  - Transferred transactions should be consistent in categorization
-- **Additional Constraints:**
-  - Transfers `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Transfers `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_transfers_updated_at`)
+  - `transfers.from_transaction_id → transactions.id` (CASCADE DELETE)
+  - `transfers.to_transaction_id → transactions.id` (CASCADE DELETE)
+- **Composite Primary Keys**:
+  - `transfers(from_transaction_id, to_transaction_id)`
+- **Unique Constraints**:
+  - `transfers.from_transaction_id` - transaction can only be source of one transfer
+  - `transfers.to_transaction_id` - transaction can only be destination of one transfer
+- **Check Constraints**:
+  - `check_different_transactions`: `from_transaction_id ≠ to_transaction_id`
+- **Validation Functions**:
+  - `check_transfers_transactions_valid()`: Comprehensive transfer validation including:
+    - Each transaction can only be in one transfer
+    - Transferred transactions cannot be from/to same account
+    - Transferred transactions must be within same ledger
+    - Transfer amounts must sum to zero (opposite amounts)
+    - Categorization must be consistent across transferred transactions
+- **Triggers**:
+  - Validation trigger for `check_transfers_transactions_valid()` after `insert` or `update` on transfers
+  - Validation trigger for `check_transfers_transactions_valid()` after `update` on transactions when amount changes
+  - Validation trigger for `check_transfers_transactions_valid()` after `insert`, `update` or `delete` on category_transactions
+  - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
-### Asset Transaction Struture
+### Asset Transaction Structure
 
 ```mermaid
 erDiagram
@@ -567,7 +535,7 @@ erDiagram
         int id PK
         int account_id FK
         date date
-        numeric amount
+        numeric amount "NUMERIC(18,2)"
         text memo
         boolean cleared
         timestamp created_at
@@ -588,10 +556,10 @@ erDiagram
     asset_transactions {
         int transaction_id PK, FK
         int asset_id FK
-        numeric quantity
-        numeric price_per_unit
-        numeric exchange_rate
-        numeric fee
+        numeric quantity "NUMERIC(18,8)"
+        numeric price_per_unit "NUMERIC(18,6)"
+        numeric exchange_rate "NUMERIC(18,6) DEFAULT 1"
+        numeric fee "NUMERIC(18,2) DEFAULT 0"
         timestamp created_at
         timestamp updated_at
     }
@@ -600,20 +568,22 @@ erDiagram
     transactions ||--|| asset_transactions : "details (1:1)"
 ```
 
-- **Relationship**:
-  - One asset can be traded in multiple transactions
-  - Each transaction can only have one assets traded
+- **Relationships**:
+  - One asset can be involved in multiple transactions
+  - Each transaction can have at most one asset transaction record
 - **Foreign Keys**:
-  - `asset_transactions.transaction_id → transactions.id`
+  - `asset_transactions.transaction_id → transactions.id` (CASCADE DELETE)
   - `asset_transactions.asset_id → assets.id`
-- **Cascade**:
-  - Deleting transaction removes all asset transactions
-- **Business Rules**:
-  - Asset transactions only allowed in asset accounts (`is_asset_account = TRUE`)
-  - Asset transaction `(quantity × price_per_unit + fee) / exchange_rate = transaction_amount` must match transaction `amount` (precision: 0.01)
-- **Additional Constraints:**
-  - asset_transactions `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - asset_transactions `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_asset_transactions_updated_at`)
+- **Validation Functions**:
+  - `check_asset_transactions_accounts()`: Asset transactions only allowed in asset accounts (`is_asset_account = TRUE`)
+  - `check_asset_transactions_valid()`: Asset transaction calculation validation:
+    - `ROUND((quantity × price_per_unit + fee) / exchange_rate, 2) = transaction.amount`
+    - Precision validation to 2 decimal places
+- **Triggers**:
+  - Validation trigger for `check_asset_transactions_accounts()` before `insert` or `update` on asset_transactions
+  - Validation trigger for `check_asset_transactions_valid()` after `insert`, `update` or `delete` on asset_transactions
+  - Validation trigger for `check_asset_transactions_valid()` after `update` on transactions when amount changes
+  - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
 ## Budget Network
 
@@ -641,31 +611,28 @@ erDiagram
     goals {
         int category_id PK, FK
         int goal_type_id FK
-        numeric goal_amount
+        numeric goal_amount "NUMERIC(18,2)"
         date goal_month
         timestamp created_at
         timestamp updated_at
     }
     
-    categories ||--|| goals : "targets (1:M)"
+    categories ||--|| goals : "targets (1:1)"
     goal_types ||--o{ goals : "defines (1:M)"
 ```
 
-- **Relationship**:
-  - One Category can only have one goal
-  - Each goal is only one goal type
+- **Relationships**:
+  - Each category can have at most one goal (1:1)
+  - Each goal is of one goal type
 - **Foreign Keys**:
-  - `goals.category_id → categories.id`
+  - `goals.category_id → categories.id` (CASCADE DELETE)
   - `goals.goal_type_id → goal_types.id`
-- **Cascade**:
-  - Deleting category removes all goals
-- **Business Rules**:
-  - Goal `goal_month` must be first day of month
-- **Additional Constraints:**
-  - Goal_types `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Goal_types `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_goal_types_updated_at`)
-  - Goals `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Goals `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_goals_updated_at`)
+- **Unique Constraints**:
+  - `goal_types.tag` - system-wide unique goal type identifiers
+- **Check Constraints**:
+  - `check_goal_date_first_of_month`: `goal_month IS NULL OR EXTRACT(DAY FROM goal_month) = 1`
+- **Triggers**:
+  - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
 ### Category-Monthly Budget
 
@@ -702,7 +669,7 @@ erDiagram
     category_budgets {
         int budget_id PK, FK
         int category_id PK, FK
-        numeric budgeted_amount
+        numeric budgeted_amount "NUMERIC(19,2) DEFAULT 0"
         timestamp created_at
         timestamp updated_at
     }
@@ -712,23 +679,48 @@ erDiagram
     budgets ||--o{ category_budgets : "allocates (1:M)"
 ```
 
-- **Relationship**:
-  - One Ledger can plan multiple budgets
-  - One budget can budget multiple category
-  - One category budgets allocates only one category
+- **Relationships**:
+  - One ledger can have multiple monthly budgets
+  - One budget can allocate to multiple categories
+  - One category can receive budget allocations from multiple budgets
 - **Foreign Keys**:
-  - `budgets.ledger_id → ledgers.id`
-  - `category_budgets.budget_id → budgets.id`
-  - `category_budgets.category_id → categories.id`
-- **Cascade**:
-  - Deleting ledger removes all budgets
-  - Deleting budgets removes all category budgets
-  - Deletign category removes all category budgets
-- **Business Rules**:
-  - One budget per month per ledger: `UNIQUE(ledger_id, budget_month)`
-  - Budgets `budget_month` must be first day of month
-- **Additional Constraints:**
-  - Budgets `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Budgets `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_budgets_updated_at`)
-  - Category_budgets `created_at` and `updated_at` default to current time (`CURRENT_TIMESTAMP`) when created
-  - Category_budgets `updated_at` update to current time (`CURRENT_TIMESTAMP`) when updated (trigger: `update_category_budgets_updated_at`)
+  - `budgets.ledger_id → ledgers.id` (CASCADE DELETE)
+  - `category_budgets.budget_id → budgets.id` (CASCADE DELETE)
+  - `category_budgets.category_id → categories.id` (CASCADE DELETE)
+- **Composite Primary Keys**:
+  - `category_budgets(budget_id, category_id)` - one amount per category per budget
+- **Unique Constraints**:
+  - `budgets(ledger_id, budget_month)` - one budget per month per ledger
+- **Check Constraints**:
+  - `check_month_first_day`: `EXTRACT(DAY FROM budget_month) = 1`
+- **Triggers**:
+  - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
+
+## Performance Optimization
+
+### Indexes
+
+The schema includes comprehensive indexing for performance:
+
+- **User/Ledger Access**: `users(email)`, `users(username)`, `ledgers(user_id, tag)`
+- **Account Management**: `accounts(ledger_id, tag)`, `accounts(ledger_id, account_type_id)`, `accounts(ledger_id, is_asset_account)` (partial)
+- **Asset Tracking**: `assets(ledger_id, tag)`, `assets(ledger_id, symbol)`
+- **Category Organization**: `category_groups(ledger_id, tag)`, `categories(category_group_id, tag)`
+- **Transaction Queries**: `transactions(account_id, date)`, `transactions(account_id, cleared, date)`
+- **Relationship Lookups**: `payee_transactions(payee_id)`, `category_transactions(category_id)`, `asset_transactions(asset_id)`
+- **Budget Analysis**: `budgets(ledger_id, budget_month)`
+- **Currency Operations**: `currencies(code)`
+
+## Data Integrity Summary
+
+The schema enforces data integrity through multiple layers:
+
+1. **Foreign Key Constraints**: Referential integrity with appropriate cascade behaviors
+2. **Unique Constraints**: Business-specific uniqueness rules
+3. **Check Constraints**: Basic data validation rules
+4. **Validation Functions**: Complex business logic enforcement
+5. **Trigger-Based Validation**: Real-time consistency checks
+6. **Composite Keys**: Natural business key enforcement
+7. **Precision Specifications**: Appropriate numeric precision for financial data
+
+This comprehensive constraint system ensures data consistency and prevents common financial data corruption scenarios.
