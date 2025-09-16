@@ -252,7 +252,7 @@ erDiagram
     assets ||--o{ asset_transactions : "traded"
     
     category_groups ||--o{ categories : "groups"
-    categories ||--o{ goals : "targets"
+    categories ||--|| goals : "targets"
     categories ||--o{ category_transactions : "categorizes"
     categories ||--o{ category_budgets : "budgeted"
     
@@ -427,6 +427,17 @@ flowchart LR
 - Comprehensive constraint system
 - Audit trail with timestamps
 - Automated validation triggers
+
+### Cascade Behavior
+
+- User data deletion removes entire ledger hierarchy
+- Configuration tables protected from deletion
+
+### Audit Trail
+
+- All tables maintain `created_at` and `updated_at` timestamps
+- Automatic triggers update timestamps on changes
+- Complete change history for compliance and debugging
 
 ## Total Schema Statistics
 
