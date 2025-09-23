@@ -213,9 +213,11 @@ erDiagram
 - **Check Constraints**:
   - `check_can_invest`: `NOT(can_invest AND on_budget_account)` - investment accounts cannot be on-budget
 - **Validation Functions**:
-  - `check_investment_account_type()`: Asset accounts (`is_asset_account = TRUE`) must have `can_invest = TRUE` account type
+  - `check_account_asset_account_type_can_invest()`: Asset accounts (`is_asset_account = TRUE`) must have `can_invest = TRUE` account type
+  - `check_account_type_can_invest_account_asset()`: Account types cannot be changed to non-investment if they have asset accounts associated
 - **Triggers**:
-  - Validation trigger for `check_investment_account_type()` before `insert` or `update` on accounts
+  - Validation trigger with `check_account_asset_account_type_can_invest()` before `insert` or `update` on accounts
+  - Validation trigger with `check_account_type_can_invest_account_asset()` after `update` of `can_invest` on account_types
   - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
 ### Ledger-Asset Structure
@@ -468,10 +470,21 @@ erDiagram
   - `check_transactions_amount`: `amount ≠ 0` - transactions cannot have zero amount
   - `check_category_transactions_amount`: `amount ≠ 0` - category transaction splits cannot have zero amount
 - **Validation Functions**:
-  - `check_category_transaction_valid()`: Sum of category transaction amounts must equal parent transaction amount
+  - `check_category_transactions_amount()`: Sum of category transaction amounts must equal parent transaction amount
+  - `check_category_transactions_ledger()`: Categories and account transactions must belong to the same ledger
+  - `check_payee_transactions_ledger()`: Payees and account transactions must belong to the same ledger
 - **Triggers**:
-  - Validation trigger for `check_category_transaction_valid()` after `insert`, `update` or `delete` on category_transactions
-  - Validation trigger for `check_category_transaction_valid()` after `update` on transactions when amount changes
+  - Validation constraint trigger deferrable with `check_category_transactions_amount()` after `insert`, `update` or `delete` on category_transactions
+  - Validation constraint trigger deferrable with `check_category_transactions_amount()` after `update` of `amount` on transactions
+  - Validation constraint trigger deferrable with `check_category_transactions_ledger()` after `insert` or `update` on category_transactions
+  - Validation constraint trigger deferrable with `check_category_transactions_ledger()` after `update` of `account_id` on transactions
+  - Validation constraint trigger deferrable with `check_category_transactions_ledger()` after `update` of `ledger_id` on accounts
+  - Validation constraint trigger deferrable with `check_category_transactions_ledger()` after `update` of `category_group_id` on categories
+  - Validation constraint trigger deferrable with `check_category_transactions_ledger()` after `update` of `ledger_id` on category_groups
+  - Validation constraint trigger deferrable with `check_payee_transactions_ledger()` after `insert` or `update` on payee_transactions
+  - Validation constraint trigger deferrable with `check_payee_transactions_ledger()` after `update` of `account_id` on transactions
+  - Validation constraint trigger deferrable with `check_payee_transactions_ledger()` after `update` of `ledger_id` on accounts
+  - Validation constraint trigger deferrable with `check_payee_transactions_ledger()` after `update` of `ledger_id` on payees
   - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
 ### Transfer Transaction Structure
@@ -515,17 +528,26 @@ erDiagram
 - **Check Constraints**:
   - `check_different_transactions`: `from_transaction_id ≠ to_transaction_id`
 - **Validation Functions**:
-  - `check_transfers_transactions_valid()`: Comprehensive transfer validation including:
-    - Each transaction can only be in one transfer
-    - Transferred transactions cannot be from/to same account
-    - Transferred transactions must be within same ledger
-    - Transfer amounts must sum to zero (opposite amounts)
-    - Categorization must be consistent across transferred transactions
+  - `check_transfers_without_payee()`: Transfer transactions cannot have payee associations
+  - `check_transfers_between_accounts()`: Transfer transactions must be between different accounts
+  - `check_transfers_amounts()`: Transfer amounts must sum to zero with proper direction (from negative, to positive)
+  - `check_transfers_categorization()`: Categorization must be consistent across transferred transactions
+  - `check_transfers_ledger()`: Transfer transactions must be within same ledger
 - **Triggers**:
-  - Validation trigger for `check_transfers_transactions_valid()` after `insert` or `update` on transfers
-  - Validation trigger for `check_transfers_transactions_valid()` after `update` on transactions when amount changes
-  - Validation trigger for `check_transfers_transactions_valid()` after `insert`, `update` or `delete` on category_transactions
+  - Validation trigger with `check_transfers_without_payee()` after `insert` or `update` on transfers
+  - Validation trigger with `check_transfers_without_payee()` after `insert` or `update` on payee_transactions
+  - Validation trigger with `check_transfers_between_accounts()` after `insert` or `update` on transfers
+  - Validation trigger with `check_transfers_between_accounts()` after `update` of `account_id` on transactions
+  - Validation trigger with `check_transfers_amounts()` after `insert` or `update` on transfers
+  - Validation trigger with `check_transfers_amounts()` after `update` of `amount` on transactions
+  - Validation constraint trigger deferrable with `check_transfers_categorization()` after `insert` or `update` on transfers
+  - Validation constraint trigger deferrable with `check_transfers_categorization()` after `insert`, `update` or `delete` on category_transactions
+  - Validation constraint trigger deferrable with `check_transfers_ledger()` after `insert` or `update` on transfers
+  - Validation constraint trigger deferrable with `check_transfers_ledger()` after `update` of `account_id` on transactions
+  - Validation constraint trigger deferrable with `check_transfers_ledger()` after `update` of `ledger_id` on accounts
   - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
+- **Impliced Unique Constraint**:
+  - With the combination of the two transfers Unique constraints and the trigger on transfers with the `check_transfers_amounts()` function that force the direction of the trasaction, each transaction can only be in one transfer
 
 ### Asset Transaction Structure
 
@@ -555,7 +577,7 @@ erDiagram
 
     asset_transactions {
         int transaction_id PK, FK
-        int asset_id FK
+        int asset_id PK, FK
         numeric quantity "NUMERIC(18,8)"
         numeric price_per_unit "NUMERIC(18,6)"
         numeric exchange_rate "NUMERIC(18,6) DEFAULT 1"
@@ -565,24 +587,32 @@ erDiagram
     }
     
     assets ||--o{ asset_transactions : "traded (1:M)"
-    transactions ||--|| asset_transactions : "details (1:1)"
+    transactions ||--o{ asset_transactions : "details (1:M)"
 ```
 
 - **Relationships**:
   - One asset can be involved in multiple transactions
-  - Each transaction can have at most one asset transaction record
+  - One transaction can have multiple asset transaction records (different assets)
 - **Foreign Keys**:
   - `asset_transactions.transaction_id → transactions.id` (CASCADE DELETE)
   - `asset_transactions.asset_id → assets.id`
+- **Composite Primary Keys**:
+  - `asset_transactions(transaction_id, asset_id)` - multiple assets per transaction allowed
 - **Validation Functions**:
-  - `check_asset_transactions_accounts()`: Asset transactions only allowed in asset accounts (`is_asset_account = TRUE`)
-  - `check_asset_transactions_valid()`: Asset transaction calculation validation:
-    - `ROUND((quantity × price_per_unit + fee) / exchange_rate, 2) = transaction.amount`
+  - `check_asset_transactions_account_asset()`: Asset transactions only allowed in asset accounts (`is_asset_account = TRUE`)
+  - `check_asset_transactions_amount()`: Asset transaction calculation validation:
+    - `ROUND(SUM((quantity × price_per_unit / exchange_rate) + fee), 2) = transaction.amount`
     - Precision validation to 2 decimal places
+  - `check_asset_transactions_ledger()`: Assets and account transactions must belong to the same ledger
 - **Triggers**:
-  - Validation trigger for `check_asset_transactions_accounts()` before `insert` or `update` on asset_transactions
-  - Validation trigger for `check_asset_transactions_valid()` after `insert`, `update` or `delete` on asset_transactions
-  - Validation trigger for `check_asset_transactions_valid()` after `update` on transactions when amount changes
+  - Validation trigger with `check_asset_transactions_account_asset()` after `insert` or `update` on asset_transactions
+  - Validation trigger with `check_asset_transactions_account_asset()` after `update` of `account_id` on transactions
+  - Validation constraint trigger deferrable with `check_asset_transactions_amount()` after `insert`, `update` or `delete` on asset_transactions
+  - Validation constraint trigger deferrable with `check_asset_transactions_amount()` after `update` of `amount` on transactions
+  - Validation constraint trigger deferrable with `check_asset_transactions_ledger()` after `insert` or `update` on asset_transactions
+  - Validation constraint trigger deferrable with `check_asset_transactions_ledger()` after `update` of `account_id` on transactions
+  - Validation constraint trigger deferrable with `check_asset_transactions_ledger()` after `update` of `ledger_id` on accounts
+  - Validation constraint trigger deferrable with `check_asset_transactions_ledger()` after `update` of `ledger_id` on assets
   - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
 ## Budget Network
@@ -604,6 +634,7 @@ erDiagram
         int id PK
         varchar tag UK
         text detail
+        boolean has_date
         timestamp created_at
         timestamp updated_at
     }
@@ -631,7 +662,13 @@ erDiagram
   - `goal_types.tag` - system-wide unique goal type identifiers
 - **Check Constraints**:
   - `check_goal_date_first_of_month`: `goal_month IS NULL OR EXTRACT(DAY FROM goal_month) = 1`
+  - `check_goal_amount_positive`: `goal_amount > 0`
+- **Validation Functions**:
+  - `check_goal_month_goal_type_has_date()`: Goals must have a month if goal type requires a date
+  - `check_goal_type_has_date_goal_month()`: Goal types cannot be changed to require dates if existing goals lack months
 - **Triggers**:
+  - Validation trigger with `check_goal_month_goal_type_has_date()` before `insert` or `update` on goals
+  - Validation trigger with `check_goal_type_has_date_goal_month()` after `update` of `has_date` on goal_types
   - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
 ### Category-Monthly Budget
@@ -693,7 +730,13 @@ erDiagram
   - `budgets(ledger_id, budget_month)` - one budget per month per ledger
 - **Check Constraints**:
   - `check_month_first_day`: `EXTRACT(DAY FROM budget_month) = 1`
+- **Validation Functions**:
+  - `check_category_budgets_ledger()`: Categories and budgets must belong to the same ledger
 - **Triggers**:
+  - Validation constraint trigger deferrable with `check_category_budgets_ledger()` after `insert` or `update` on category_budgets
+  - Validation constraint trigger deferrable with `check_category_budgets_ledger()` after `update` of `ledger_id` on budgets
+  - Validation constraint trigger deferrable with `check_category_budgets_ledger()` after `update` of `category_group_id` on categories
+  - Validation constraint trigger deferrable with `check_category_budgets_ledger()` after `update` of `ledger_id` on category_groups
   - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
 ## Performance Optimization
@@ -713,14 +756,26 @@ The schema includes comprehensive indexing for performance:
 
 ## Data Integrity Summary
 
-The schema enforces data integrity through multiple layers:
+The schema enforces data integrity through multiple sophisticated layers:
 
 1. **Foreign Key Constraints**: Referential integrity with appropriate cascade behaviors
 2. **Unique Constraints**: Business-specific uniqueness rules
-3. **Check Constraints**: Basic data validation rules
-4. **Validation Functions**: Complex business logic enforcement
-5. **Trigger-Based Validation**: Real-time consistency checks
-6. **Composite Keys**: Natural business key enforcement
+3. **Check Constraints**: Basic data validation rules including positive amounts and date formatting
+4. **Validation Functions**: 16 complex business logic functions with comprehensive error handling
+5. **Trigger-Based Validation**:
+   - **Regular Triggers**: Immediate validation for basic business rules
+   - **CONSTRAINT Triggers (DEFERRABLE)**: Complex validations that can be deferred until transaction commit
+6. **Composite Keys**: Natural business key enforcement allowing multiple relationships
 7. **Precision Specifications**: Appropriate numeric precision for financial data
+8. **Cross-Table Consistency**: Advanced validation ensuring ledger consistency across related entities
 
-This comprehensive constraint system ensures data consistency and prevents common financial data corruption scenarios.
+### Key Validation Features
+
+- **Amount Consistency**: Transaction splits must equal parent amounts
+- **Ledger Isolation**: All related entities must belong to the same ledger
+- **Transfer Logic**: Comprehensive transfer validation including amounts, directions, and categorization consistency  
+- **Asset Account Restrictions**: Asset transactions only in designated asset accounts
+- **Goal Type Flexibility**: Dynamic goal requirements based on goal type configuration
+- **Bidirectional Validation**: Changes to parent entities validate all dependent relationships
+
+This comprehensive constraint system ensures data consistency and prevents common financial data corruption scenarios while supporting complex business logic through sophisticated trigger-based validation.

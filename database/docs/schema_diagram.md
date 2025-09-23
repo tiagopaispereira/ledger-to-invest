@@ -143,6 +143,7 @@ erDiagram
         int id PK
         varchar tag UK
         text detail
+        boolean has_date
         timestamp created_at
         timestamp updated_at
     }
@@ -201,7 +202,7 @@ erDiagram
     
     asset_transactions {
         int transaction_id PK, FK
-        int asset_id FK
+        int asset_id PK, FK
         numeric quantity
         numeric price_per_unit
         numeric exchange_rate
@@ -264,7 +265,7 @@ erDiagram
     transactions ||--|| payee_transactions : "receive/send"
     transactions ||--|| transfers : "from_transaction"
     transactions ||--|| transfers : "to_transaction"
-    transactions ||--|| asset_transactions : "details"
+    transactions ||--o{ asset_transactions : "details"
     
     budgets ||--o{ category_budgets : "allocates"
 ```
@@ -446,5 +447,5 @@ flowchart LR
   - **Lookup Tables**: 5 (date_formats, currencies, account_types, asset_types, goal_types)
   - **Junction Tables**: 4 (currency_exchange_rates, category_budgets, category_transactions, transfers)
 - **Indexes**: 18 performance indexes
-- **Triggers**: 22 update timestamp triggers + 9 validation triggers
-- **Functions**: 5 validation functions
+- **Triggers**: 22 update timestamp triggers + 12 validation triggers + 26 validation constraint triggers deferrable
+- **Functions**: 16 validation functions + 1 update timestamp function
