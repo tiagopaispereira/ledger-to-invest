@@ -323,7 +323,7 @@ CREATE TABLE IF NOT EXISTS
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
-        CONSTRAINT check_transactions_amount CHECK (amount <> 0)
+        CONSTRAINT check_transactions_amount_zero CHECK (amount <> 0)
     );
 
 CREATE TABLE IF NOT EXISTS
@@ -346,7 +346,7 @@ CREATE TABLE IF NOT EXISTS
         PRIMARY KEY (transaction_id, category_id),
         FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE CASCADE,
         FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE CASCADE,
-        CONSTRAINT check_category_transactions_amount CHECK (amount <> 0)
+        CONSTRAINT check_category_transactions_amount_zero CHECK (amount <> 0)
     );
 
 -- ====================================
@@ -682,6 +682,89 @@ UPDATE OF has_date ON goal_types FOR EACH ROW WHEN (
         NEW.has_date
 )
 EXECUTE FUNCTION check_goal_type_has_date_goal_month ();
+
+-- Create Function and trigger to check Categorized transactions in on_budget_account
+CREATE OR
+REPLACE FUNCTION check_category_transactions_on_budget_account () RETURNS TRIGGER AS $$
+DECLARE v_transaction_ids INT[];
+DECLARE rec RECORD;
+BEGIN
+   
+    IF (TG_TABLE_NAME = 'transactions') THEN
+        SELECT ARRAY_AGG(DISTINCT transaction_id) INTO v_transaction_ids
+        FROM category_transactions
+        WHERE transaction_id = NEW.id;
+    ELSIF (TG_TABLE_NAME = 'accounts') THEN
+        SELECT ARRAY_AGG(DISTINCT category_transactions.transaction_id) INTO v_transaction_ids
+        FROM category_transactions
+        INNER JOIN transactions
+        ON category_transactions.transaction_id = transactions.id
+        WHERE transactions.account_id = NEW.id;
+    ELSIF (TG_TABLE_NAME = 'account_types') THEN
+        SELECT ARRAY_AGG(DISTINCT category_transactions.transaction_id) INTO v_transaction_ids
+        FROM category_transactions
+        INNER JOIN transactions
+        ON category_transactions.transaction_id = transactions.id
+        INNER JOIN accounts
+        ON transactions.account_id = accounts.id
+        WHERE accounts.account_type_id = NEW.id;
+    ELSE
+        v_transaction_ids := ARRAY[NEW.transaction_id];
+    END IF;
+
+    FOR rec IN (
+        SELECT transactions.id, transactions.account_id, account_types.on_budget_account
+        FROM transactions
+        INNER JOIN accounts
+        ON transactions.account_id = accounts.id
+        INNER JOIN account_types
+        ON accounts.account_type_id = account_types.id
+        WHERE transactions.id = ANY(v_transaction_ids)
+        )
+    LOOP
+
+        IF (rec.on_budget_account = FALSE) THEN
+            RAISE EXCEPTION 'Categorized transactions only allowed in Accounts with on_budget_account (for transaction_id % and account_id %).', rec.id, rec.account_id;
+        END IF;
+
+    END LOOP;
+
+    RETURN NEW;
+
+END;
+$$ LANGUAGE 'plpgsql';
+
+CREATE TRIGGER trg_category_transactions_on_budget_account_on_change
+AFTER INSERT OR
+UPDATE ON category_transactions FOR EACH ROW
+EXECUTE FUNCTION check_category_transactions_on_budget_account ();
+
+CREATE TRIGGER trg_category_transactions_on_budget_account_on_transactions_change
+AFTER
+UPDATE OF account_id ON transactions FOR EACH ROW WHEN (
+    OLD.account_id IS DISTINCT
+    FROM
+        NEW.account_id
+)
+EXECUTE FUNCTION check_category_transactions_on_budget_account ();
+
+CREATE TRIGGER trg_category_transactions_on_budget_account_on_accounts_change
+AFTER
+UPDATE OF account_type_id ON accounts FOR EACH ROW WHEN (
+    OLD.account_type_id IS DISTINCT
+    FROM
+        NEW.account_type_id
+)
+EXECUTE FUNCTION check_category_transactions_on_budget_account ();
+
+CREATE TRIGGER trg_category_transactions_on_budget_account_on_account_types_change
+AFTER
+UPDATE OF on_budget_account ON account_types FOR EACH ROW WHEN (
+    OLD.on_budget_account IS DISTINCT
+    FROM
+        NEW.on_budget_account
+)
+EXECUTE FUNCTION check_category_transactions_on_budget_account ();
 
 -- Create Function and trigger to validate Categorized transactions amounts
 CREATE OR
@@ -1092,21 +1175,62 @@ EXECUTE FUNCTION check_transfers_amounts ();
 -- Create Function and trigger to validate Transfer Categorization consistency
 CREATE OR
 REPLACE FUNCTION check_transfers_categorization () RETURNS TRIGGER AS $$
-DECLARE v_transaction_ids INT[];
+DECLARE v_from_transaction_ids INT[];
+DECLARE v_to_transaction_ids INT[];
 DECLARE v_transfers_category_count_mismatch INT;
 DECLARE rec RECORD;
 BEGIN
 
-    IF (TG_TABLE_NAME = 'category_transactions') THEN
-        v_transaction_ids := ARRAY[NEW.transaction_id, OLD.transaction_id];
+    IF (TG_TABLE_NAME = 'transactions') THEN
+        SELECT ARRAY_AGG(DISTINCT from_transaction_id), ARRAY_AGG(DISTINCT to_transaction_id) INTO v_from_transaction_ids, v_to_transaction_ids
+        FROM transfers
+        WHERE from_transaction_id = NEW.id 
+            OR to_transaction_id = NEW.id;
+    ELSIF (TG_TABLE_NAME = 'accounts') THEN
+        SELECT ARRAY_AGG(DISTINCT transfers.from_transaction_id), ARRAY_AGG(DISTINCT transfers.to_transaction_id) INTO v_from_transaction_ids, v_to_transaction_ids
+        FROM transfers
+        INNER JOIN transactions
+        ON transfers.from_transaction_id = transactions.id
+            OR transfers.to_transaction_id = transactions.id
+        WHERE transactions.account_id = NEW.id;
+    ELSIF (TG_TABLE_NAME = 'account_types') THEN
+        SELECT ARRAY_AGG(DISTINCT transfers.from_transaction_id), ARRAY_AGG(DISTINCT transfers.to_transaction_id) INTO v_from_transaction_ids, v_to_transaction_ids
+        FROM transfers
+        INNER JOIN transactions
+        ON transfers.from_transaction_id = transactions.id
+            OR transfers.to_transaction_id = transactions.id
+        INNER JOIN accounts
+        ON transactions.account_id = accounts.id
+        WHERE accounts.account_type_id = NEW.id;
+    ELSIF (TG_TABLE_NAME = 'category_transactions') THEN
+        SELECT ARRAY_AGG(DISTINCT from_transaction_id), ARRAY_AGG(DISTINCT to_transaction_id) INTO v_from_transaction_ids, v_to_transaction_ids
+        FROM transfers
+        WHERE from_transaction_id IN (NEW.transaction_id, OLD.transaction_id)
+            OR to_transaction_id IN (NEW.transaction_id, OLD.transaction_id);
     ELSE
-        v_transaction_ids := ARRAY[NEW.from_transaction_id, NEW.to_transaction_id];
+        v_from_transaction_ids := ARRAY[NEW.from_transaction_id];
+        v_to_transaction_ids := ARRAY[NEW.to_transaction_id];
     END IF;
 
     FOR rec IN (
-        SELECT from_transaction_id, to_transaction_id
+        SELECT transfers.from_transaction_id, transfers.to_transaction_id
         FROM transfers
-        WHERE from_transaction_id = ANY(v_transaction_ids) OR to_transaction_id = ANY(v_transaction_ids)
+        INNER JOIN transactions from_transaction
+        ON transfers.from_transaction_id = from_transaction.id
+        INNER JOIN accounts from_account
+        ON from_transaction.account_id = from_account.id
+        INNER JOIN account_types from_account_type
+        ON from_account.account_type_id = from_account_type.id
+        INNER JOIN transactions to_transaction
+        ON transfers.to_transaction_id = to_transaction.id
+        INNER JOIN accounts to_account
+        ON to_transaction.account_id = to_account.id
+        INNER JOIN account_types to_account_type
+        ON to_account.account_type_id = to_account_type.id
+        WHERE transfers.from_transaction_id = ANY(v_from_transaction_ids)
+            AND transfers.to_transaction_id = ANY(v_to_transaction_ids)
+            AND from_account_type.on_budget_account = TRUE
+            AND to_account_type.on_budget_account = TRUE
         )
     LOOP
 
@@ -1139,6 +1263,33 @@ CREATE CONSTRAINT TRIGGER trg_transfers_categorization_on_category_transactions_
 AFTER INSERT OR
 UPDATE OR
 DELETE ON category_transactions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+EXECUTE FUNCTION check_transfers_categorization ();
+
+CREATE TRIGGER trg_transfers_categorization_on_transactions_change
+AFTER
+UPDATE OF account_id ON transactions FOR EACH ROW WHEN (
+    OLD.account_id IS DISTINCT
+    FROM
+        NEW.account_id
+)
+EXECUTE FUNCTION check_transfers_categorization ();
+
+CREATE TRIGGER trg_transfers_categorization_on_accounts_change
+AFTER
+UPDATE OF account_type_id ON accounts FOR EACH ROW WHEN (
+    OLD.account_type_id IS DISTINCT
+    FROM
+        NEW.account_type_id
+)
+EXECUTE FUNCTION check_transfers_categorization ();
+
+CREATE TRIGGER trg_transfers_categorization_on_account_types_change
+AFTER
+UPDATE OF on_budget_account ON account_types FOR EACH ROW WHEN (
+    OLD.on_budget_account IS DISTINCT
+    FROM
+        NEW.on_budget_account
+)
 EXECUTE FUNCTION check_transfers_categorization ();
 
 -- Create Function and trigger to validate Transfer Ledger consistency
@@ -1209,25 +1360,38 @@ EXECUTE FUNCTION check_transfers_ledger ();
 -- Create Function and trigger to check asset transactions in asset account
 CREATE OR
 REPLACE FUNCTION check_asset_transactions_account_asset () RETURNS TRIGGER AS $$
-DECLARE v_transaction_id INT;
-DECLARE v_asset_account BOOLEAN; 
+DECLARE v_transaction_ids INT[];
+DECLARE rec RECORD;
 BEGIN
 
     IF (TG_TABLE_NAME = 'transactions') THEN
-        v_transaction_id := NEW.id;
+        SELECT ARRAY_AGG(DISTINCT transaction_id) INTO v_transaction_ids
+        FROM asset_transactions
+        WHERE transaction_id = NEW.id;
+    ELSIF (TG_TABLE_NAME = 'accounts') THEN
+        SELECT ARRAY_AGG(DISTINCT asset_transactions.transaction_id) INTO v_transaction_ids
+        FROM asset_transactions
+        INNER JOIN transactions
+        ON asset_transactions.transaction_id = transactions.id
+        WHERE transactions.account_id = NEW.id;
     ELSE
-        v_transaction_id := NEW.transaction_id;
+        v_transaction_ids := ARRAY[NEW.transaction_id];
     END IF;
 
-    SELECT accounts.is_asset_account INTO v_asset_account
-    FROM transactions
-    INNER JOIN accounts
-    ON transactions.account_id = accounts.id
-    WHERE transactions.id = v_transaction_id;
+    FOR rec IN (
+        SELECT transactions.id, transactions.account_id, accounts.is_asset_account
+        FROM transactions
+        INNER JOIN accounts
+        ON transactions.account_id = accounts.id
+        WHERE transactions.id = ANY(v_transaction_ids)
+        )
+    LOOP
     
-    IF v_asset_account = FALSE THEN
-        RAISE EXCEPTION 'Asset Transaction only allowed in Asset Account (for transaction_id %).', v_transaction_id;
-    END IF;
+        IF (rec.is_asset_account = FALSE) THEN
+            RAISE EXCEPTION 'Asset Transaction only allowed in Asset Account (for transaction_id % and account_id %).', rec.id, rec.account_id;
+        END IF;
+
+    END LOOP;
 
     RETURN NEW;
 END;
@@ -1244,6 +1408,15 @@ UPDATE OF account_id ON transactions FOR EACH ROW WHEN (
     OLD.account_id IS DISTINCT
     FROM
         NEW.account_id
+)
+EXECUTE FUNCTION check_asset_transactions_account_asset ();
+
+CREATE TRIGGER trg_asset_transactions_account_asset_on_accounts_change
+AFTER
+UPDATE OF is_asset_account ON accounts FOR EACH ROW WHEN (
+    OLD.is_asset_account IS DISTINCT
+    FROM
+        NEW.is_asset_account
 )
 EXECUTE FUNCTION check_asset_transactions_account_asset ();
 
