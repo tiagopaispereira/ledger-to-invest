@@ -1,473 +1,11 @@
--- ====================================
--- LTI (Ledger-To-Invest) App Database Schema
+-- ===============================================================
+-- LTI (Ledger-To-Invest) App Database Function and Trigger Schema
 -- PostgreSQL Implementation
--- ====================================
--- Drop Database
-DROP TABLE IF EXISTS category_budgets;
-
-DROP TABLE IF EXISTS budgets;
-
-DROP TABLE IF EXISTS asset_transactions;
-
-DROP TABLE IF EXISTS transfers;
-
-DROP TABLE IF EXISTS category_transactions;
-
-DROP TABLE IF EXISTS payee_transactions;
-
-DROP TABLE IF EXISTS transactions;
-
-DROP TABLE IF EXISTS payees;
-
-DROP TABLE IF EXISTS goals;
-
-DROP TABLE IF EXISTS goal_types;
-
-DROP TABLE IF EXISTS categories;
-
-DROP TABLE IF EXISTS category_groups;
-
-DROP TABLE IF EXISTS asset_prices;
-
-DROP TABLE IF EXISTS assets;
-
-DROP TABLE IF EXISTS asset_types;
-
-DROP TABLE IF EXISTS accounts;
-
-DROP TABLE IF EXISTS account_types;
-
-DROP TABLE IF EXISTS ledgers;
-
-DROP TABLE IF EXISTS users;
-
-DROP TABLE IF EXISTS currency_exchange_rates;
-
-DROP TABLE IF EXISTS currencies;
-
-DROP TABLE IF EXISTS date_formats;
-
-DROP FUNCTION IF EXISTS check_category_budgets_ledger;
-
-DROP FUNCTION IF EXISTS check_asset_transactions_ledger;
-
-DROP FUNCTION IF EXISTS check_asset_transactions_amount;
-
-DROP FUNCTION IF EXISTS check_asset_transactions_account_asset;
-
-DROP FUNCTION IF EXISTS check_transfers_ledger;
-
-DROP FUNCTION IF EXISTS check_transfers_categorization;
-
-DROP FUNCTION IF EXISTS check_transfers_amounts;
-
-DROP FUNCTION IF EXISTS check_transfers_between_accounts;
-
-DROP FUNCTION IF EXISTS check_transfers_without_payee;
-
-DROP FUNCTION IF EXISTS check_payee_transactions_ledger;
-
-DROP FUNCTION IF EXISTS check_category_transactions_ledger;
-
-DROP FUNCTION IF EXISTS check_category_transactions_amount;
-
-DROP FUNCTION IF EXISTS check_goal_type_has_date_goal_month;
-
-DROP FUNCTION IF EXISTS check_goal_month_goal_type_has_date;
-
-DROP FUNCTION IF EXISTS check_account_type_can_invest_account_asset;
-
-DROP FUNCTION IF EXISTS check_account_asset_account_type_can_invest;
-
-DROP FUNCTION IF EXISTS update_updated_at_column;
-
--- ====================================
--- USER MANAGEMENT
--- ====================================
-CREATE TABLE IF NOT EXISTS
-    date_formats (
-        id SERIAL PRIMARY KEY,
-        tag VARCHAR(50) UNIQUE NOT NULL,
-        detail TEXT NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-
-CREATE TABLE IF NOT EXISTS
-    currencies (
-        id SERIAL PRIMARY KEY,
-        code VARCHAR(3) UNIQUE NOT NULL,
-        detail TEXT NOT NULL,
-        symbol VARCHAR(3) NOT NULL,
-        on_left BOOLEAN NOT NULL,
-        breaking_space BOOLEAN NOT NULL,
-        fractional_separator VARCHAR(1) NOT NULL,
-        thousand_separator VARCHAR(1) NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-
-CREATE TABLE IF NOT EXISTS
-    currency_exchange_rates (
-        from_currency_id INTEGER NOT NULL,
-        to_currency_id INTEGER NOT NULL,
-        date DATE NOT NULL,
-        rate NUMERIC(18, 6) NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (from_currency_id, to_currency_id, date),
-        FOREIGN KEY (from_currency_id) REFERENCES currencies (id),
-        FOREIGN KEY (to_currency_id) REFERENCES currencies (id),
-        CONSTRAINT check_different_currencies CHECK (from_currency_id <> to_currency_id)
-    );
-
-CREATE TABLE IF NOT EXISTS
-    users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(255) UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
-        first_name VARCHAR(255) NOT NULL,
-        last_name VARCHAR(255) NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        email_active BOOLEAN NOT NULL DEFAULT FALSE,
-        is_active BOOLEAN NOT NULL DEFAULT TRUE,
-        has_privileges BOOLEAN NOT NULL DEFAULT FALSE,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-
--- ====================================
--- BUDGET STRUCTURE
--- ====================================
-CREATE TABLE IF NOT EXISTS
-    ledgers (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL,
-        tag VARCHAR(255) NOT NULL,
-        date_format_id INTEGER NOT NULL,
-        currency_id INTEGER NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-        FOREIGN KEY (date_format_id) REFERENCES date_formats (id),
-        FOREIGN KEY (currency_id) REFERENCES currencies (id),
-        UNIQUE (user_id, tag)
-    );
-
--- ====================================
--- ACCOUNT MANAGEMENT
--- ====================================
-CREATE TABLE IF NOT EXISTS
-    account_types (
-        id SERIAL PRIMARY KEY,
-        tag VARCHAR(50) UNIQUE NOT NULL,
-        detail TEXT NOT NULL,
-        on_budget_account BOOLEAN NOT NULL DEFAULT TRUE,
-        can_invest BOOLEAN NOT NULL DEFAULT FALSE,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT check_can_invest CHECK (
-            NOT (
-                can_invest AND
-                on_budget_account
-            )
-        )
-    );
-
-CREATE TABLE IF NOT EXISTS
-    accounts (
-        id SERIAL PRIMARY KEY,
-        ledger_id INTEGER NOT NULL,
-        tag VARCHAR(50) NOT NULL,
-        account_type_id INTEGER NOT NULL,
-        currency_id INTEGER NOT NULL,
-        is_asset_account BOOLEAN NOT NULL DEFAULT FALSE,
-        is_closed BOOLEAN NOT NULL DEFAULT FALSE,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (ledger_id) REFERENCES ledgers (id) ON DELETE CASCADE,
-        FOREIGN KEY (account_type_id) REFERENCES account_types (id),
-        FOREIGN KEY (currency_id) REFERENCES currencies (id),
-        UNIQUE (ledger_id, tag)
-    );
-
--- ====================================
--- INVESTMENT TRACKING
--- ====================================
-CREATE TABLE IF NOT EXISTS
-    asset_types (
-        id SERIAL PRIMARY KEY,
-        tag VARCHAR(50) UNIQUE NOT NULL,
-        detail TEXT NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-
-CREATE TABLE IF NOT EXISTS
-    assets (
-        id SERIAL PRIMARY KEY,
-        ledger_id INTEGER NOT NULL,
-        symbol VARCHAR(20) NOT NULL,
-        tag VARCHAR(255) NOT NULL,
-        asset_type_id INTEGER NOT NULL,
-        currency_id INTEGER NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (ledger_id) REFERENCES ledgers (id) ON DELETE CASCADE,
-        FOREIGN KEY (asset_type_id) REFERENCES asset_types (id),
-        FOREIGN KEY (currency_id) REFERENCES currencies (id),
-        UNIQUE (ledger_id, symbol),
-        UNIQUE (ledger_id, tag)
-    );
-
-CREATE TABLE IF NOT EXISTS
-    asset_prices (
-        asset_id INTEGER NOT NULL,
-        date DATE NOT NULL,
-        price NUMERIC(18, 6) NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (asset_id, date),
-        FOREIGN KEY (asset_id) REFERENCES assets (id) ON DELETE CASCADE
-    );
-
--- ====================================
--- CATEGORY MANAGEMENT
--- ====================================
-CREATE TABLE IF NOT EXISTS
-    category_groups (
-        id SERIAL PRIMARY KEY,
-        ledger_id INTEGER NOT NULL,
-        tag VARCHAR(255) NOT NULL,
-        sort_order INTEGER NOT NULL,
-        is_system BOOLEAN NOT NULL DEFAULT FALSE,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (ledger_id) REFERENCES ledgers (id) ON DELETE CASCADE,
-        UNIQUE (ledger_id, tag),
-        UNIQUE (ledger_id, sort_order)
-    );
-
-CREATE TABLE IF NOT EXISTS
-    categories (
-        id SERIAL PRIMARY KEY,
-        category_group_id INTEGER NOT NULL,
-        tag VARCHAR(255) NOT NULL,
-        sort_order INTEGER NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (category_group_id) REFERENCES category_groups (id) ON DELETE CASCADE,
-        UNIQUE (category_group_id, tag),
-        UNIQUE (category_group_id, sort_order)
-    );
-
--- ====================================
--- GOALS
--- ====================================
-CREATE TABLE IF NOT EXISTS
-    goal_types (
-        id SERIAL PRIMARY KEY,
-        tag VARCHAR(50) UNIQUE NOT NULL,
-        detail TEXT NOT NULL,
-        has_date BOOLEAN NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-
-CREATE TABLE IF NOT EXISTS
-    goals (
-        category_id INTEGER PRIMARY KEY,
-        goal_type_id INTEGER NOT NULL,
-        goal_amount NUMERIC(18, 2) NOT NULL,
-        goal_month DATE,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE CASCADE,
-        FOREIGN KEY (goal_type_id) REFERENCES goal_types (id),
-        CONSTRAINT check_goal_date_first_of_month CHECK (
-            goal_month IS NULL OR
-            EXTRACT(
-                DAY
-                FROM
-                    goal_month
-            ) = 1
-        ),
-        CONSTRAINT check_goal_amount_positive CHECK (goal_amount > 0)
-    );
-
--- ====================================
--- PAYEES
--- ====================================
-CREATE TABLE IF NOT EXISTS
-    payees (
-        id SERIAL PRIMARY KEY,
-        ledger_id INTEGER NOT NULL,
-        tag VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (ledger_id) REFERENCES ledgers (id) ON DELETE CASCADE,
-        UNIQUE (ledger_id, tag)
-    );
-
--- ====================================
--- TRANSACTIONS
--- ====================================
-CREATE TABLE IF NOT EXISTS
-    transactions (
-        id SERIAL PRIMARY KEY,
-        account_id INTEGER NOT NULL,
-        date DATE NOT NULL,
-        amount NUMERIC(18, 2) NOT NULL,
-        memo TEXT,
-        cleared BOOLEAN NOT NULL DEFAULT FALSE,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
-        CONSTRAINT check_transactions_amount_zero CHECK (amount <> 0)
-    );
-
-CREATE TABLE IF NOT EXISTS
-    payee_transactions (
-        transaction_id INTEGER PRIMARY KEY,
-        payee_id INTEGER NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE CASCADE,
-        FOREIGN KEY (payee_id) REFERENCES payees (id) ON DELETE CASCADE
-    );
-
-CREATE TABLE IF NOT EXISTS
-    category_transactions (
-        transaction_id INTEGER NOT NULL,
-        category_id INTEGER NOT NULL,
-        amount NUMERIC(18, 2) NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (transaction_id, category_id),
-        FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE CASCADE,
-        FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE CASCADE,
-        CONSTRAINT check_category_transactions_amount_zero CHECK (amount <> 0)
-    );
-
--- ====================================
--- TRANSFERS
--- ====================================
-CREATE TABLE IF NOT EXISTS
-    transfers (
-        from_transaction_id INTEGER UNIQUE NOT NULL,
-        to_transaction_id INTEGER UNIQUE NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (from_transaction_id, to_transaction_id),
-        FOREIGN KEY (from_transaction_id) REFERENCES transactions (id) ON DELETE CASCADE,
-        FOREIGN KEY (to_transaction_id) REFERENCES transactions (id) ON DELETE CASCADE,
-        CONSTRAINT check_different_transactions CHECK (from_transaction_id <> to_transaction_id)
-    );
-
--- ====================================
--- ASSET TRANSACTIONS
--- ====================================
-CREATE TABLE IF NOT EXISTS
-    asset_transactions (
-        transaction_id INTEGER NOT NULL,
-        asset_id INTEGER NOT NULL,
-        quantity NUMERIC(18, 8) NOT NULL,
-        price_per_unit NUMERIC(18, 6) NOT NULL,
-        exchange_rate NUMERIC(18, 6) NOT NULL DEFAULT 1,
-        fee NUMERIC(18, 2) NOT NULL DEFAULT 0,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (transaction_id, asset_id),
-        FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE CASCADE,
-        FOREIGN KEY (asset_id) REFERENCES assets (id)
-    );
-
--- ====================================
--- BUDGET TRACKING
--- ====================================
-CREATE TABLE IF NOT EXISTS
-    budgets (
-        id SERIAL PRIMARY KEY,
-        ledger_id INTEGER NOT NULL,
-        budget_month DATE NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (ledger_id) REFERENCES ledgers (id) ON DELETE CASCADE,
-        UNIQUE (ledger_id, budget_month),
-        CONSTRAINT check_month_first_day CHECK (
-            EXTRACT(
-                DAY
-                FROM
-                    budget_month
-            ) = 1
-        )
-    );
-
-CREATE TABLE IF NOT EXISTS
-    category_budgets (
-        budget_id INTEGER NOT NULL,
-        category_id INTEGER NOT NULL,
-        budgeted_amount NUMERIC(19, 2) NOT NULL DEFAULT 0,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (budget_id, category_id),
-        FOREIGN KEY (budget_id) REFERENCES budgets (id) ON DELETE CASCADE,
-        FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE CASCADE
-    );
-
--- ====================================
--- INDEXES FOR PERFORMANCE
--- ====================================
--- Currency exchange rate indexes
-CREATE INDEX IF NOT EXISTS idx_currencies_code ON currencies (code);
-
--- User and Budget indexes
-CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
-
-CREATE INDEX IF NOT EXISTS idx_users_username ON users (username);
-
-CREATE INDEX IF NOT EXISTS idx_ledgers_user_id_tag ON ledgers (user_id, tag);
-
--- Account indexes
-CREATE INDEX IF NOT EXISTS idx_accounts_ledger_id_tag ON accounts (ledger_id, tag);
-
-CREATE INDEX IF NOT EXISTS idx_accounts_ledger_id_type ON accounts (ledger_id, account_type_id);
-
-CREATE INDEX IF NOT EXISTS idx_accounts_ledger_id_investment ON accounts (ledger_id, is_asset_account)
-WHERE
-    is_asset_account = TRUE;
-
--- Asset and pricing indexes
-CREATE INDEX IF NOT EXISTS idx_assets_ledger_id_tag ON assets (ledger_id, tag);
-
-CREATE INDEX IF NOT EXISTS idx_assets_ledger_id_symbol ON assets (ledger_id, symbol);
-
--- Category and payee indexes
-CREATE INDEX IF NOT EXISTS idx_category_groups_ledger_id_tag ON category_groups (ledger_id, tag);
-
-CREATE INDEX IF NOT EXISTS idx_categories_group_id_tag ON categories (category_group_id, tag);
-
-CREATE INDEX IF NOT EXISTS idx_payees_ledger_id_tag ON payees (ledger_id, tag);
-
--- Transaction indexes
-CREATE INDEX IF NOT EXISTS idx_transactions_account_date ON transactions (account_id, date);
-
-CREATE INDEX IF NOT EXISTS idx_transactions_account_cleared_date ON transactions (account_id, cleared, date);
-
-CREATE INDEX IF NOT EXISTS idx_payee_transactions_account_payee_date ON payee_transactions (payee_id);
-
-CREATE INDEX IF NOT EXISTS idx_category_transactions_account_category_date ON category_transactions (category_id);
-
--- Asset transaction indexes
-CREATE INDEX IF NOT EXISTS idx_asset_transactions_asset_id ON asset_transactions (asset_id);
-
--- Budget tracking indexes
-CREATE INDEX IF NOT EXISTS idx_budgets_budget_month ON budgets (ledger_id, budget_month);
-
--- ====================================
--- FUNCTIONS AND TRIGGERS
--- ====================================
--- Function to update the updated_at timestamp
+-- ===============================================================
+--
+-- ===============================================================
+-- Function and triggers to update the updated_at timestamp
+-- ===============================================================
 CREATE OR
 REPLACE FUNCTION update_updated_at_column () RETURNS TRIGGER AS $$
 BEGIN
@@ -476,7 +14,6 @@ BEGIN
 END;
 $$ LANGUAGE 'plpgsql';
 
--- Create triggers for updated_at columns
 CREATE TRIGGER update_date_formats_updated_at BEFORE
 UPDATE ON date_formats FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column ();
@@ -565,7 +102,10 @@ CREATE TRIGGER update_category_budgets_updated_at BEFORE
 UPDATE ON category_budgets FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column ();
 
--- Create Function and trigger to check if the account can be an asset account based of the account type
+-- ===============================================================
+-- Function and triggers to check if the account can be an asset 
+-- account based of the account type
+-- ===============================================================
 CREATE OR
 REPLACE FUNCTION check_account_asset_account_type_can_invest () RETURNS TRIGGER AS $$
 DECLARE v_account_type_can_invest BOOLEAN; 
@@ -592,7 +132,10 @@ CREATE TRIGGER trg_account_asset_account_type_can_invest_on_change BEFORE INSERT
 UPDATE ON accounts FOR EACH ROW
 EXECUTE FUNCTION check_account_asset_account_type_can_invest ();
 
--- Create Function and trigger to check if the account type can be modified based on the account associaded
+-- ===============================================================
+-- Function and triggers to check if the account type can be 
+-- modified based on the account associaded
+-- ===============================================================
 CREATE OR
 REPLACE FUNCTION check_account_type_can_invest_account_asset () RETURNS TRIGGER AS $$
 DECLARE v_account_asset_count INT; 
@@ -624,7 +167,10 @@ UPDATE OF can_invest ON account_types FOR EACH ROW WHEN (
 )
 EXECUTE FUNCTION check_account_type_can_invest_account_asset ();
 
--- Create Function and trigger to check if the goal should have a month based of the goal type
+-- ===============================================================
+-- Function and triggers to check if the goal should have a month
+-- based of the goal type
+-- ===============================================================
 CREATE OR
 REPLACE FUNCTION check_goal_month_goal_type_has_date () RETURNS TRIGGER AS $$
 DECLARE v_goal_type_has_date BOOLEAN; 
@@ -651,7 +197,10 @@ CREATE TRIGGER trg_goal_month_goal_type_has_date_on_change BEFORE INSERT OR
 UPDATE ON goals FOR EACH ROW
 EXECUTE FUNCTION check_goal_month_goal_type_has_date ();
 
--- Create Function and trigger to check if the goal type can be modified based on the goals associaded
+-- ===============================================================
+-- Function and triggers to check if the goal type can be modified
+-- based on the goals associaded
+-- ===============================================================
 CREATE OR
 REPLACE FUNCTION check_goal_type_has_date_goal_month () RETURNS TRIGGER AS $$
 DECLARE v_goal_month_count INT; 
@@ -683,7 +232,10 @@ UPDATE OF has_date ON goal_types FOR EACH ROW WHEN (
 )
 EXECUTE FUNCTION check_goal_type_has_date_goal_month ();
 
--- Create Function and trigger to check Categorized transactions in on_budget_account
+-- ===============================================================
+-- Function and triggers to check categorized transactions in 
+-- on budget account
+-- ===============================================================
 CREATE OR
 REPLACE FUNCTION check_category_transactions_on_budget_account () RETURNS TRIGGER AS $$
 DECLARE v_transaction_ids INT[];
@@ -766,7 +318,9 @@ UPDATE OF on_budget_account ON account_types FOR EACH ROW WHEN (
 )
 EXECUTE FUNCTION check_category_transactions_on_budget_account ();
 
--- Create Function and trigger to validate Categorized transactions amounts
+-- ===============================================================
+-- Function and triggers to check categorized transactions amounts
+-- ===============================================================
 CREATE OR
 REPLACE FUNCTION check_category_transactions_amount () RETURNS TRIGGER AS $$
 DECLARE v_transaction_ids INT[];
@@ -826,7 +380,10 @@ UPDATE OF amount ON transactions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN
 )
 EXECUTE FUNCTION check_category_transactions_amount ();
 
--- Create Function and trigger to validate Categorized transactions Ledger consistency
+-- ===============================================================
+-- Function and triggers to check categorized transactions ledger 
+-- consistency
+-- ===============================================================
 CREATE OR
 REPLACE FUNCTION check_category_transactions_ledger () RETURNS TRIGGER AS $$
 DECLARE v_transaction_ids INT[];
@@ -934,7 +491,10 @@ UPDATE OF ledger_id ON category_groups DEFERRABLE INITIALLY DEFERRED FOR EACH RO
 )
 EXECUTE FUNCTION check_category_transactions_ledger ();
 
--- Create Function and trigger to validate Payee transactions Ledger consistency
+-- ===============================================================
+-- Function and triggers to check payee transactions ledger 
+-- consistency
+-- ===============================================================
 CREATE OR
 REPLACE FUNCTION check_payee_transactions_ledger () RETURNS TRIGGER AS $$
 DECLARE v_transaction_ids INT[];
@@ -1025,7 +585,9 @@ UPDATE OF ledger_id ON payees DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (
 )
 EXECUTE FUNCTION check_payee_transactions_ledger ();
 
--- Create Function and trigger to validate Transfer without Payee
+-- ===============================================================
+-- Function and triggers to check transfer without payee
+-- ===============================================================
 CREATE OR
 REPLACE FUNCTION check_transfers_without_payee () RETURNS TRIGGER AS $$
 DECLARE v_from_transaction_id INT;
@@ -1069,7 +631,10 @@ AFTER INSERT OR
 UPDATE ON payee_transactions FOR EACH ROW
 EXECUTE FUNCTION check_transfers_without_payee ();
 
--- Create Function and trigger to validate Transfer between different accounts
+-- ===============================================================
+-- Function and triggers to check transfer between different 
+-- accounts
+-- ===============================================================
 CREATE OR
 REPLACE FUNCTION check_transfers_between_accounts () RETURNS TRIGGER AS $$
 DECLARE v_from_transaction_id INT;
@@ -1117,7 +682,9 @@ UPDATE OF account_id ON transactions FOR EACH ROW WHEN (
 )
 EXECUTE FUNCTION check_transfers_between_accounts ();
 
--- Create Function and trigger to validate Transfer amounts
+-- ===============================================================
+-- Function and triggers to check transfer amounts
+-- ===============================================================
 CREATE OR
 REPLACE FUNCTION check_transfers_amounts () RETURNS TRIGGER AS $$
 DECLARE v_from_transaction_id INT;
@@ -1172,7 +739,10 @@ UPDATE OF amount ON transactions FOR EACH ROW WHEN (
 )
 EXECUTE FUNCTION check_transfers_amounts ();
 
--- Create Function and trigger to validate Transfer Categorization consistency
+-- ===============================================================
+-- Function and triggers to check transfer categorization
+-- consistency
+-- ===============================================================
 CREATE OR
 REPLACE FUNCTION check_transfers_categorization () RETURNS TRIGGER AS $$
 DECLARE v_from_transaction_ids INT[];
@@ -1292,7 +862,9 @@ UPDATE OF on_budget_account ON account_types FOR EACH ROW WHEN (
 )
 EXECUTE FUNCTION check_transfers_categorization ();
 
--- Create Function and trigger to validate Transfer Ledger consistency
+-- ===============================================================
+-- Function and triggers to check transfer ledger consistency
+-- ===============================================================
 CREATE OR
 REPLACE FUNCTION check_transfers_ledger () RETURNS TRIGGER AS $$
 DECLARE v_transaction_ids INT[];
@@ -1357,7 +929,10 @@ UPDATE OF ledger_id ON accounts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN 
 )
 EXECUTE FUNCTION check_transfers_ledger ();
 
--- Create Function and trigger to check asset transactions in asset account
+-- ===============================================================
+-- Function and triggers to check asset transactions in asset 
+-- account
+-- ===============================================================
 CREATE OR
 REPLACE FUNCTION check_asset_transactions_account_asset () RETURNS TRIGGER AS $$
 DECLARE v_transaction_ids INT[];
@@ -1420,7 +995,9 @@ UPDATE OF is_asset_account ON accounts FOR EACH ROW WHEN (
 )
 EXECUTE FUNCTION check_asset_transactions_account_asset ();
 
--- Create Function and trigger to to validate Asset transactions amounts
+-- ===============================================================
+-- Function and triggers to check asset transactions amounts
+-- ===============================================================
 CREATE OR
 REPLACE FUNCTION check_asset_transactions_amount () RETURNS TRIGGER AS $$
 DECLARE v_transaction_ids INT[];
@@ -1480,7 +1057,10 @@ UPDATE OF amount ON transactions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN
 )
 EXECUTE FUNCTION check_asset_transactions_amount ();
 
--- Create Function and trigger to validate Asset transactions Ledger consistency
+-- ===============================================================
+-- Function and triggers to check asset transactions ledger 
+-- consistency
+-- ===============================================================
 CREATE OR
 REPLACE FUNCTION check_asset_transactions_ledger () RETURNS TRIGGER AS $$
 DECLARE v_transaction_ids INT[];
@@ -1571,7 +1151,10 @@ UPDATE OF ledger_id ON assets DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (
 )
 EXECUTE FUNCTION check_asset_transactions_ledger ();
 
--- Create Function and trigger to validate Categorized Budget Ledger consistency
+-- ===============================================================
+-- Function and triggers to check categorized budget ledger 
+-- consistency
+-- ===============================================================
 CREATE OR
 REPLACE FUNCTION check_category_budgets_ledger () RETURNS TRIGGER AS $$
 DECLARE v_budget_ids INT[];
