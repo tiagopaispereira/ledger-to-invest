@@ -474,8 +474,12 @@ erDiagram
   - `check_category_transactions_amount()`: Sum of category transaction amounts must equal parent transaction amount
   - `check_category_transactions_ledger()`: Categories and account transactions must belong to the same ledger
   - `check_payee_transactions_ledger()`: Payees and account transactions must belong to the same ledger
+  - `check_transactions_cleared()`: Validates if transactions can be cleared:
+    - All transactions on budget accounts needs be categorized
+    - Only transfers are allowed to not have payee
+    - All transactions off budget accounts needs to be a transfer or an asset transaction
 - **Triggers**:
-  - Validation trigger with `check_category_transactions_on_budget_account()` after `insert`, `update` on category_transactions
+  - Validation trigger with `check_category_transactions_on_budget_account()` after `insert` or `update` on category_transactions
   - Validation trigger with `check_category_transactions_on_budget_account()` after `update` of `account_id` on transactions
   - Validation trigger with `check_category_transactions_on_budget_account()` after `update` of `account_type_id` on accounts
   - Validation trigger with `check_category_transactions_on_budget_account()` after `update` of `on_budget_account` on account_types
@@ -491,6 +495,13 @@ erDiagram
   - Validation constraint trigger deferrable with `check_payee_transactions_ledger()` after `update` of `ledger_id` on accounts
   - Validation constraint trigger deferrable with `check_payee_transactions_ledger()` after `update` of `ledger_id` on payees
   - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
+  - Validation trigger with `check_transactions_cleared()` after `insert` or `update` on transactions
+  - Validation trigger with `check_transactions_cleared()` after `insert`, `update` or `delete` on category_transactions
+  - Validation trigger with `check_transactions_cleared()` after `insert`, `update` or `delete` on payee_transactions
+  - Validation trigger with `check_transactions_cleared()` after `insert`, `update` or `delete` on transfers
+  - Validation trigger with `check_transactions_cleared()` after `insert`, `update` or `delete` on asset_transactions
+  - Validation trigger with `check_transactions_cleared()` after `update` of `account_type_id` on accounts
+  - Validation trigger with `check_transactions_cleared()` after `update` of `on_budget_account` on account_types
 
 ### Transfer Transaction Structure
 
@@ -556,6 +567,8 @@ erDiagram
   - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 - **Impliced Unique Constraint**:
   - With the combination of the two transfers Unique constraints and the trigger on transfers with the `check_transfers_amounts()` function that force the direction of the trasaction, each transaction can only be in one transfer
+- **Aditional Notes**:
+  - The dates of the transferred transactions are not required to be the same, in order to accommodate transfers that are not instantaneous and may take a few business days
 
 ### Asset Transaction Structure
 
@@ -608,6 +621,7 @@ erDiagram
   - `asset_transactions(transaction_id, asset_id)` - multiple assets per transaction allowed
 - **Validation Functions**:
   - `check_asset_transactions_account_asset()`: Asset transactions only allowed in asset accounts (`is_asset_account = TRUE`)
+  - `check_asset_transactions_transfers()`: Asset transactions can not be also a transfers
   - `check_asset_transactions_amount()`: Asset transaction calculation validation:
     - `ROUND(SUM((quantity × price_per_unit / exchange_rate) + fee), 2) = transaction.amount`
     - Precision validation to 2 decimal places
@@ -616,6 +630,8 @@ erDiagram
   - Validation trigger with `check_asset_transactions_account_asset()` after `insert` or `update` on asset_transactions
   - Validation trigger with `check_asset_transactions_account_asset()` after `update` of `account_id` on transactions
   - Validation trigger with `check_asset_transactions_account_asset()` after `update` of `is_asset_account` on accounts
+  - Validation trigger with `check_asset_transactions_transfers()` after `insert` or `update` on asset_transactions
+  - Validation trigger with `check_asset_transactions_transfers()` after `insert` or `update` on transfers
   - Validation constraint trigger deferrable with `check_asset_transactions_amount()` after `insert`, `update` or `delete` on asset_transactions
   - Validation constraint trigger deferrable with `check_asset_transactions_amount()` after `update` of `amount` on transactions
   - Validation constraint trigger deferrable with `check_asset_transactions_ledger()` after `insert` or `update` on asset_transactions

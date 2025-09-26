@@ -81,3 +81,4 @@ DROP FUNCTION IF EXISTS check_account_type_can_invest_account_asset;
 DROP FUNCTION IF EXISTS check_account_asset_account_type_can_invest;
 
 DROP FUNCTION IF EXISTS update_updated_at_column;
+
