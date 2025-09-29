@@ -446,6 +446,6 @@ flowchart LR
   - **Core Entity Tables**: 13
   - **Lookup Tables**: 5 (date_formats, currencies, account_types, asset_types, goal_types)
   - **Junction Tables**: 4 (currency_exchange_rates, category_budgets, category_transactions, transfers)
-- **Indexes**: 18 performance indexes
+- **Indexes**: 12 performance indexes + 4 trigger indexes
 - **Triggers**: 22 update timestamp triggers + 24 validation triggers + 31 validation triggers deferrable
-- **Functions**: 19 validation functions + 1 update function
+- **Functions**: 17 validation functions + 1 update function

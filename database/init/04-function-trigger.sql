@@ -127,132 +127,154 @@ CREATE TRIGGER update_category_budgets_updated_at
   EXECUTE FUNCTION update_updated_at_column();
 
 -- ===============================================================
--- Function and triggers to check if the account can be an asset
--- account based of the account type
+-- Function and triggers to check if the asset account uses an 
+-- account type that does allow investments
 -- ===============================================================
-CREATE OR REPLACE FUNCTION check_account_asset_account_type_can_invest()
+CREATE OR REPLACE FUNCTION check_account_asset_account_type_can_invest ()
   RETURNS TRIGGER
   AS $$
 DECLARE
-  v_account_type_can_invest boolean;
+  v_account_id integer;
+  v_account_type_id integer;
 BEGIN
-  IF (NEW.is_asset_account = TRUE) THEN
-    SELECT
-      can_invest INTO v_account_type_can_invest
-    FROM
-      account_types
-    WHERE
-      id = NEW.account_type_id;
-    IF (v_account_type_can_invest = FALSE) THEN
-      RAISE EXCEPTION 'Account `%` can not be an asset account since it is not an invest account type.', NEW.tag;
-    END IF;
+  CASE
+    WHEN TG_TABLE_NAME = 'accounts'
+      AND TG_OP IN ('INSERT', 'UPDATE') THEN
+      
+      IF NEW.is_asset_account = TRUE
+        AND EXISTS (
+          SELECT 1
+          FROM account_types
+          WHERE id = NEW.account_type_id
+            AND can_invest = FALSE
+        ) THEN
+        v_account_id := NEW.id;
+        v_account_type_id := NEW.account_type_id;
+      END IF;
+    
+    WHEN TG_TABLE_NAME = 'account_types'
+      AND TG_OP = 'UPDATE' THEN
+      
+      IF NEW.can_invest = FALSE THEN
+        SELECT id INTO v_account_id
+        FROM accounts
+        WHERE account_type_id = NEW.id
+          AND is_asset_account = TRUE
+        LIMIT 1;
+        
+        IF FOUND THEN
+          v_account_type_id := NEW.id;
+        END IF;
+      END IF;
+    
+    ELSE
+      RAISE EXCEPTION 'Trigger function called inappropriately on table % with operation %', TG_TABLE_NAME, TG_OP;
+  END CASE;
+  
+  IF v_account_id IS NOT NULL THEN
+    RAISE EXCEPTION 'Asset account cannot use account type that does not allow investments'
+      USING
+        DETAIL = format(
+          'Account ID %s cannot be an asset account because account type ID %s has can_invest = FALSE', 
+          v_account_id, 
+          v_account_type_id
+        ),
+        ERRCODE = 'check_violation',
+        HINT = 'Only account types with can_invest = TRUE can be used for asset accounts';
   END IF;
+  
   RETURN NEW;
 END;
-$$
-LANGUAGE 'plpgsql';
+$$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_account_asset_account_type_can_invest_on_change
-  BEFORE INSERT OR UPDATE ON accounts
+CREATE TRIGGER trg_accounts_asset_investment_check
+  BEFORE INSERT OR UPDATE OF is_asset_account, account_type_id 
+  ON accounts
   FOR EACH ROW
+  WHEN (NEW.is_asset_account = TRUE)
+  EXECUTE FUNCTION check_account_asset_account_type_can_invest();
+
+CREATE TRIGGER trg_account_types_investment_check
+  BEFORE UPDATE OF can_invest 
+  ON account_types
+  FOR EACH ROW
+  WHEN (OLD.can_invest = TRUE AND NEW.can_invest = FALSE)
   EXECUTE FUNCTION check_account_asset_account_type_can_invest();
 
 -- ===============================================================
--- Function and triggers to check if the account type can be
--- modified based on the account associaded
+-- Function and triggers to check if goal have a target month when
+-- using goal type that requires dates
 -- ===============================================================
-CREATE OR REPLACE FUNCTION check_account_type_can_invest_account_asset()
+CREATE OR REPLACE FUNCTION check_goal_month_goal_type_has_date ()
   RETURNS TRIGGER
   AS $$
 DECLARE
-  v_account_asset_count int;
+  v_category_id integer;
+  v_goal_type_id integer;
 BEGIN
-  IF (NEW.can_invest = FALSE) THEN
-    SELECT
-      COUNT(*) INTO v_account_asset_count
-    FROM
-      accounts
-    WHERE
-      account_type_id = NEW.id
-      AND is_asset_account = TRUE;
-    IF (v_account_asset_count > 0) THEN
-      RAISE EXCEPTION 'Account type `%` can not be a non investment account since it already has asset account(s) associated.', NEW.tag;
-    END IF;
+  CASE
+    WHEN TG_TABLE_NAME = 'goals'
+      AND TG_OP IN ('INSERT', 'UPDATE') THEN
+      
+      IF NEW.goal_month IS NULL
+        AND EXISTS (
+          SELECT 1
+          FROM goal_types
+          WHERE id = NEW.goal_type_id
+            AND has_date = TRUE
+        ) THEN
+        v_category_id := NEW.category_id;
+        v_goal_type_id := NEW.goal_type_id;
+      END IF;
+    
+    WHEN TG_TABLE_NAME = 'goal_types'
+      AND TG_OP = 'UPDATE' THEN
+      
+      IF NEW.has_date = TRUE THEN
+        SELECT category_id INTO v_category_id
+        FROM goals
+        WHERE goal_type_id = NEW.id
+          AND goal_month IS NULL
+        LIMIT 1;
+      
+        IF FOUND THEN
+          v_goal_type_id := NEW.id;
+        END IF;
+      END IF;
+    
+    ELSE
+      RAISE EXCEPTION 'Trigger function called inappropriately on table % with operation %', TG_TABLE_NAME, TG_OP;
+  END CASE;
+  
+  IF v_category_id IS NOT NULL THEN
+    RAISE EXCEPTION 'Goal must have a target month when using goal type that requires dates'
+      USING
+        DETAIL = format(
+          'Goal for Category ID %s must have a goal_month because goal type ID %s has has_date = TRUE', 
+          v_category_id, 
+          v_goal_type_id
+        ),
+        ERRCODE = 'check_violation',
+        HINT = 'Either set a goal_month or use a goal type with has_date = FALSE';
   END IF;
+  
   RETURN NEW;
 END;
-$$
-LANGUAGE 'plpgsql';
+$$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_account_type_can_invest_account_asset_on_change
-  AFTER UPDATE OF can_invest ON account_types
+CREATE TRIGGER trg_goals_month_has_date_check
+  BEFORE INSERT OR UPDATE OF goal_month, goal_type_id 
+  ON goals
   FOR EACH ROW
-  WHEN(OLD.can_invest IS DISTINCT FROM NEW.can_invest)
-  EXECUTE FUNCTION check_account_type_can_invest_account_asset();
-
--- ===============================================================
--- Function and triggers to check if the goal should have a month
--- based of the goal type
--- ===============================================================
-CREATE OR REPLACE FUNCTION check_goal_month_goal_type_has_date()
-  RETURNS TRIGGER
-  AS $$
-DECLARE
-  v_goal_type_has_date boolean;
-BEGIN
-  IF (NEW.goal_month IS NULL) THEN
-    SELECT
-      has_date INTO v_goal_type_has_date
-    FROM
-      goal_types
-    WHERE
-      id = NEW.goal_type_id;
-    IF (v_goal_type_has_date = TRUE) THEN
-      RAISE EXCEPTION 'Goal for Category Id `%` needs to be have a month associated since it is goal type based on a date.', NEW.category_id;
-    END IF;
-  END IF;
-  RETURN NEW;
-END;
-$$
-LANGUAGE 'plpgsql';
-
-CREATE TRIGGER trg_goal_month_goal_type_has_date_on_change
-  BEFORE INSERT OR UPDATE ON goals
-  FOR EACH ROW
+  WHEN (NEW.goal_month IS NULL)
   EXECUTE FUNCTION check_goal_month_goal_type_has_date();
 
--- ===============================================================
--- Function and triggers to check if the goal type can be modified
--- based on the goals associaded
--- ===============================================================
-CREATE OR REPLACE FUNCTION check_goal_type_has_date_goal_month()
-  RETURNS TRIGGER
-  AS $$
-DECLARE
-  v_goal_month_count int;
-BEGIN
-  IF (NEW.has_date = TRUE) THEN
-    SELECT
-      COUNT(*) INTO v_goal_month_count
-    FROM
-      goals
-    WHERE
-      goal_type_id = NEW.id
-      AND goal_month IS NULL;
-    IF (v_goal_month_count > 0) THEN
-      RAISE EXCEPTION 'Goal type `%` can not be a goal based on date since it has goals without month associated.', NEW.tag;
-    END IF;
-  END IF;
-  RETURN NEW;
-END;
-$$
-LANGUAGE 'plpgsql';
-
-CREATE TRIGGER trg_goal_type_has_date_goal_month_on_change
-  AFTER UPDATE OF has_date ON goal_types
+CREATE TRIGGER trg_goal_types_has_date_check
+  BEFORE UPDATE OF has_date 
+  ON goal_types
   FOR EACH ROW
-  WHEN(OLD.has_date IS DISTINCT FROM NEW.has_date)
-  EXECUTE FUNCTION check_goal_type_has_date_goal_month();
+  WHEN (OLD.has_date = FALSE AND NEW.has_date = TRUE)
+  EXECUTE FUNCTION check_goal_month_goal_type_has_date();
 
 -- ===============================================================
 -- Function and triggers to check categorized transactions in

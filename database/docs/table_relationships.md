@@ -214,10 +214,9 @@ erDiagram
   - `check_can_invest`: `NOT(can_invest AND on_budget_account)` - investment accounts cannot be on-budget
 - **Validation Functions**:
   - `check_account_asset_account_type_can_invest()`: Asset accounts (`is_asset_account = TRUE`) must have `can_invest = TRUE` account type
-  - `check_account_type_can_invest_account_asset()`: Account types cannot be changed to non-investment if they have asset accounts associated
 - **Triggers**:
-  - Validation trigger with `check_account_asset_account_type_can_invest()` before `insert` or `update` on accounts
-  - Validation trigger with `check_account_type_can_invest_account_asset()` after `update` of `can_invest` on account_types
+  - Validation trigger with `check_account_asset_account_type_can_invest()` before `insert` or `update` of `is_asset_account, account_type_id` on accounts when `is_asset_account = TRUE`
+  - Validation trigger with `check_account_asset_account_type_can_invest()` before `update` of `can_invest` on account_types when `can_invest` changes from `TRUE` to `FALSE`
   - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
 ### Ledger-Asset Structure
@@ -689,11 +688,10 @@ erDiagram
   - `check_goal_date_first_of_month`: `goal_month IS NULL OR EXTRACT(DAY FROM goal_month) = 1`
   - `check_goal_amount_positive`: `goal_amount > 0`
 - **Validation Functions**:
-  - `check_goal_month_goal_type_has_date()`: Goals must have a month if goal type requires a date
-  - `check_goal_type_has_date_goal_month()`: Goal types cannot be changed to require dates if existing goals lack months
+  - `check_goal_month_goal_type_has_date()`: Goals must have a target month if goal type requires dates
 - **Triggers**:
-  - Validation trigger with `check_goal_month_goal_type_has_date()` before `insert` or `update` on goals
-  - Validation trigger with `check_goal_type_has_date_goal_month()` after `update` of `has_date` on goal_types
+  - Validation trigger with `check_goal_month_goal_type_has_date()` before `insert` or `update` of `goal_month, goal_type_id` on goals when `goal_month IS NULL`
+  - Validation trigger with `check_goal_month_goal_type_has_date()` after `update` of `has_date` on goal_types when `has_date` changes from `FALSE` to `TRUE`
   - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
 ### Category-Monthly Budget

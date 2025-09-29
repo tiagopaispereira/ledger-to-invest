@@ -6,52 +6,44 @@
 -- ================================================
 -- INDEXES FOR PERFORMANCE
 -- ================================================
--- Currency exchange rate indexes
-CREATE INDEX IF NOT EXISTS idx_currencies_code ON currencies(code);
+-- Ledger indexes
+CREATE INDEX IF NOT EXISTS idx_ledgers_user_id ON ledgers(user_id);
 
--- User and Budget indexes
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_accounts_ledger_id ON accounts(ledger_id);
 
-CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_assets_ledger_id ON assets(ledger_id);
 
-CREATE INDEX IF NOT EXISTS idx_ledgers_user_id_tag ON ledgers(user_id, tag);
+CREATE INDEX IF NOT EXISTS idx_category_groups_ledger_id ON category_groups(ledger_id);
 
--- Account indexes
-CREATE INDEX IF NOT EXISTS idx_accounts_ledger_id_tag ON accounts(ledger_id, tag);
+CREATE INDEX IF NOT EXISTS idx_categories_category_group_id ON categories(category_group_id);
 
-CREATE INDEX IF NOT EXISTS idx_accounts_ledger_id_type ON accounts(ledger_id, account_type_id);
-
-CREATE INDEX IF NOT EXISTS idx_accounts_ledger_id_investment ON accounts(ledger_id, is_asset_account)
-WHERE
-  is_asset_account = TRUE;
-
--- Asset and pricing indexes
-CREATE INDEX IF NOT EXISTS idx_assets_ledger_id_tag ON assets(ledger_id, tag);
-
-CREATE INDEX IF NOT EXISTS idx_assets_ledger_id_symbol ON assets(ledger_id, symbol);
-
--- Category and payee indexes
-CREATE INDEX IF NOT EXISTS idx_category_groups_ledger_id_tag ON category_groups(ledger_id, tag);
-
-CREATE INDEX IF NOT EXISTS idx_categories_group_id_tag ON categories(category_group_id, tag);
-
-CREATE INDEX IF NOT EXISTS idx_payees_ledger_id_tag ON payees(ledger_id, tag);
+CREATE INDEX IF NOT EXISTS idx_payees_ledger_id ON payees(ledger_id);
 
 -- Transaction indexes
-CREATE INDEX IF NOT EXISTS idx_transactions_account_date ON transactions(account_id, date);
+CREATE INDEX IF NOT EXISTS idx_transactions_account_id_cleared_date ON transactions(account_id, cleared, date);
 
-CREATE INDEX IF NOT EXISTS idx_transactions_account_cleared_date ON transactions(account_id, cleared, date);
+CREATE INDEX IF NOT EXISTS idx_category_transactions_category_id ON category_transactions(category_id);
 
-CREATE INDEX IF NOT EXISTS idx_payee_transactions_account_payee_date ON payee_transactions(payee_id);
+CREATE INDEX IF NOT EXISTS idx_payee_transactions_payee_id ON payee_transactions(payee_id);
 
-CREATE INDEX IF NOT EXISTS idx_category_transactions_account_category_date ON category_transactions(category_id);
-
--- Asset transaction indexes
 CREATE INDEX IF NOT EXISTS idx_asset_transactions_asset_id ON asset_transactions(asset_id);
 
--- Budget tracking indexes
-CREATE INDEX IF NOT EXISTS idx_budgets_budget_month ON budgets(ledger_id, budget_month);
+-- Budget indexes
+CREATE INDEX IF NOT EXISTS idx_budgets_ledger_id ON budgets(ledger_id);
+
+CREATE INDEX IF NOT EXISTS idx_category_budgets_category_id ON category_budgets(category_id);
 
 -- ================================================
 -- INDEXES FOR TRIGGERS
 -- ================================================
+CREATE INDEX IF NOT EXISTS idx_account_types_id_can_invest_false ON account_types(id)
+  WHERE can_invest = FALSE;
+
+CREATE INDEX IF NOT EXISTS idx_accounts_account_type_id_is_asset_account_true ON accounts(account_type_id)
+  WHERE is_asset_account = TRUE;
+
+CREATE INDEX IF NOT EXISTS idx_goal_types_id_has_date_true ON goal_types(id)
+  WHERE has_date = TRUE;
+
+CREATE INDEX IF NOT EXISTS idx_goals_goal_type_id_goal_month_null ON goals(goal_type_id)
+  WHERE goal_month IS NULL;
