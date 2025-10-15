@@ -48,15 +48,19 @@ DROP TABLE IF EXISTS date_formats;
 
 DROP FUNCTION IF EXISTS check_category_budgets_ledger;
 
+DROP FUNCTION IF EXISTS check_transactions_cleared;
+
 DROP FUNCTION IF EXISTS check_asset_transactions_ledger;
 
 DROP FUNCTION IF EXISTS check_asset_transactions_amount;
 
 DROP FUNCTION IF EXISTS check_asset_transactions_account_asset;
 
+DROP FUNCTION IF EXISTS check_transfers_asset_transaction;
+
 DROP FUNCTION IF EXISTS check_transfers_ledger;
 
-DROP FUNCTION IF EXISTS check_transfers_categorization;
+DROP FUNCTION IF EXISTS check_transfers_category;
 
 DROP FUNCTION IF EXISTS check_transfers_amounts;
 
@@ -72,11 +76,7 @@ DROP FUNCTION IF EXISTS check_category_transactions_amount;
 
 DROP FUNCTION IF EXISTS check_category_transactions_on_budget_account;
 
-DROP FUNCTION IF EXISTS check_goal_type_has_date_goal_month;
-
 DROP FUNCTION IF EXISTS check_goal_month_goal_type_has_date;
-
-DROP FUNCTION IF EXISTS check_account_type_can_invest_account_asset;
 
 DROP FUNCTION IF EXISTS check_account_asset_account_type_can_invest;
 

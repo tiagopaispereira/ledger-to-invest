@@ -10,7 +10,7 @@ For a detailed breakdown of each table and its business logic, see `table-relati
 
 ```mermaid
 erDiagram
-    %% Configuration Tables
+    %% Tables
     date_formats {
         int id PK
         varchar tag UK
@@ -41,7 +41,6 @@ erDiagram
         timestamp updated_at
     }
     
-    %% User Management
     users {
         int id PK
         varchar username UK
@@ -56,7 +55,6 @@ erDiagram
         timestamp updated_at
     }
     
-    %% Ledger Structure
     ledgers {
         int id PK
         int user_id FK
@@ -67,7 +65,6 @@ erDiagram
         timestamp updated_at
     }
     
-    %% Account Management
     account_types {
         int id PK
         varchar tag UK
@@ -90,7 +87,6 @@ erDiagram
         timestamp updated_at
     }
     
-    %% Investment Tracking
     asset_types {
         int id PK
         varchar tag UK
@@ -118,7 +114,6 @@ erDiagram
         timestamp updated_at
     }
     
-    %% Category Management
     category_groups {
         int id PK
         int ledger_id FK
@@ -138,7 +133,6 @@ erDiagram
         timestamp updated_at
     }
     
-    %% Goals
     goal_types {
         int id PK
         varchar tag UK
@@ -157,7 +151,6 @@ erDiagram
         timestamp updated_at
     }
     
-    %% Payees
     payees {
         int id PK
         int ledger_id FK
@@ -166,7 +159,6 @@ erDiagram
         timestamp updated_at
     }
     
-    %% Transactions
     transactions {
         int id PK
         int account_id FK
@@ -211,7 +203,6 @@ erDiagram
         timestamp updated_at
     }
     
-    %% Budget Tracking
     budgets {
         int id PK
         int ledger_id FK
@@ -234,79 +225,54 @@ erDiagram
     currencies ||--o{ ledgers : "uses"
     currencies ||--o{ accounts : "uses"
     currencies ||--o{ assets : "priced_in"
-    
     date_formats ||--o{ ledgers : "uses"
-    
     users ||--o{ ledgers : "owns"
-    
     ledgers ||--o{ accounts : "contains"
     ledgers ||--o{ category_groups : "organizes"
     ledgers ||--o{ assets : "tracks"
     ledgers ||--o{ payees : "manages"
     ledgers ||--o{ budgets : "planned"
-    
     account_types ||--o{ accounts : "defines"
     accounts ||--o{ transactions : "records"
-    
     asset_types ||--o{ assets : "categorizes"
     assets ||--o{ asset_prices : "valued"
     assets ||--o{ asset_transactions : "traded"
-    
     category_groups ||--o{ categories : "groups"
     categories ||--|| goals : "targets"
     categories ||--o{ category_transactions : "categorizes"
     categories ||--o{ category_budgets : "budgeted"
-    
     goal_types ||--o{ goals : "defines"
-    
     payees ||--o{ payee_transactions : "from/to"
-    
     transactions ||--o{ category_transactions : "splits_into"
     transactions ||--|| payee_transactions : "receive/send"
     transactions ||--|| transfers : "from_transaction"
     transactions ||--|| transfers : "to_transaction"
     transactions ||--o{ asset_transactions : "details"
-    
     budgets ||--o{ category_budgets : "allocates"
 ```
 
 ## Functional Layer Overview
 
 ```mermaid
-graph TB
-    subgraph "User Layer"
+graph 
+    subgraph "Admin Layer"
         A[date_formats]
         B[currencies] 
         C[currency_exchange_rates]
         D[users]
+        F[account_types]
+        H[asset_types]
+        M[goal_types]
     end
     
     subgraph "Ledger Layer"
         E[ledgers]
-    end
-    
-    subgraph "Account Layer"
-        F[account_types]
         G[accounts]
-    end
-    
-    subgraph "Investment Layer"
-        H[asset_types]
         I[assets]
         J[asset_prices]
-    end
-    
-    subgraph "Category Layer"
         K[category_groups]
         L[categories]
-    end
-    
-    subgraph "Goals Layer"
-        M[goal_types]
         N[goals]
-    end
-    
-    subgraph "Payee Layer"
         O[payees]
     end
     
@@ -357,16 +323,10 @@ graph TB
 
 ```mermaid
 pie title Table Distribution by Functional Layer
+    "Ledger Layer" : 8
+    "Admin Layer" : 7
     "Transaction Layer" : 5
-    "Configuration Layer" : 3
-    "Investment Layer" : 3
-    "Account Layer" : 2
-    "Category Layer" : 2
-    "Goals Layer" : 2
     "Budget Layer" : 2
-    "User Layer" : 1
-    "Ledger Layer" : 1
-    "Payee Layer" : 1
 ```
 
 ## Data Flow Overview
@@ -374,21 +334,28 @@ pie title Table Distribution by Functional Layer
 ```mermaid
 flowchart LR
     A[User Creates Ledger] --> B[Sets Up Accounts]
-    B --> C[Creates Categories]
-    C --> D[Defines Payees]
-    D --> E[Records Transactions]
-    E --> F{Transaction Type}
-    F -->|Simple| G[Single Category]
-    F -->|Split| H[Multiple Categories]
-    F -->|Transfer| I[Between Accounts]
-    F -->|Investment| J[Asset Transaction]
-    G --> O[Associates Payee]
-    H --> O
-    O --> K[Budget Tracking]
-    I --> K
-    J --> L[Portfolio Tracking]
-    K --> M[Monthly Reports]
-    L --> N[Investment Analysis]
+    A --> C[Creates Categories]
+    C --> D[Define Goals]
+    A --> E[Defines Payees]
+    B --> F[Records Transactions]
+    D --> F
+    E --> F
+    F --> G{Account Type}
+    G --> |On-Budget| H[Associates Category]
+    G --> |Off-Budge Non-Investment| I[Liability]
+    G --> |Off-Budget Investment| J[Asset]
+    H --> K{Transaction Type}
+    H --> L[Budget Tracking]
+    K --> |Record| M[Associates Payee]
+    K --> |Transfer| N[Between Accounts]
+    I --> O{Transaction Type}
+    O --> |Record| M
+    O --> |Transfer| N
+    J --> P{Transaction Type}
+    P --> |Dividend| M
+    P --> |Transfer| N
+    P --> |Investment| R[Asset Transaction]
+    R --> M
 ```
 
 ## Key Design Features
@@ -446,6 +413,6 @@ flowchart LR
   - **Core Entity Tables**: 13
   - **Lookup Tables**: 5 (date_formats, currencies, account_types, asset_types, goal_types)
   - **Junction Tables**: 4 (currency_exchange_rates, category_budgets, category_transactions, transfers)
-- **Indexes**: 12 performance indexes + 4 trigger indexes
-- **Triggers**: 22 update timestamp triggers + 24 validation triggers + 31 validation triggers deferrable
+- **Indexes**: 15 trigger indexes + 7 performance indexes
 - **Functions**: 17 validation functions + 1 update function
+- **Triggers**: 22 update before triggers + 67 validation before triggers + 7 validation after triggers deferrable

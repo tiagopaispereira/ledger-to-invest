@@ -6,7 +6,7 @@
 -- ================================================
 -- USER MANAGEMENT
 -- ================================================
-CREATE TABLE IF NOT EXISTS date_formats(
+CREATE TABLE IF NOT EXISTS date_formats (
   id serial PRIMARY KEY,
   tag varchar(50) UNIQUE NOT NULL,
   detail text NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS date_formats(
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS currencies(
+CREATE TABLE IF NOT EXISTS currencies (
   id serial PRIMARY KEY,
   code varchar(3) UNIQUE NOT NULL,
   detail text NOT NULL,
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS currencies(
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS currency_exchange_rates(
+CREATE TABLE IF NOT EXISTS currency_exchange_rates (
   from_currency_id integer NOT NULL,
   to_currency_id integer NOT NULL,
   date date NOT NULL,
@@ -35,12 +35,12 @@ CREATE TABLE IF NOT EXISTS currency_exchange_rates(
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (from_currency_id, to_currency_id, date),
-  FOREIGN KEY (from_currency_id) REFERENCES currencies(id),
-  FOREIGN KEY (to_currency_id) REFERENCES currencies(id),
+  FOREIGN KEY (from_currency_id) REFERENCES currencies (id),
+  FOREIGN KEY (to_currency_id) REFERENCES currencies (id),
   CONSTRAINT check_different_currencies CHECK (from_currency_id <> to_currency_id)
 );
 
-CREATE TABLE IF NOT EXISTS users(
+CREATE TABLE IF NOT EXISTS users (
   id serial PRIMARY KEY,
   username varchar(255) UNIQUE NOT NULL,
   password_hash text NOT NULL,
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS users(
 -- ================================================
 -- LEDGER STRUCTURE
 -- ================================================
-CREATE TABLE IF NOT EXISTS ledgers(
+CREATE TABLE IF NOT EXISTS ledgers (
   id serial PRIMARY KEY,
   user_id integer NOT NULL,
   tag varchar(255) NOT NULL,
@@ -65,16 +65,16 @@ CREATE TABLE IF NOT EXISTS ledgers(
   currency_id integer NOT NULL,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (date_format_id) REFERENCES date_formats(id),
-  FOREIGN KEY (currency_id) REFERENCES currencies(id),
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+  FOREIGN KEY (date_format_id) REFERENCES date_formats (id),
+  FOREIGN KEY (currency_id) REFERENCES currencies (id),
   UNIQUE (user_id, tag)
 );
 
 -- ================================================
 -- ACCOUNT MANAGEMENT
 -- ================================================
-CREATE TABLE IF NOT EXISTS account_types(
+CREATE TABLE IF NOT EXISTS account_types (
   id serial PRIMARY KEY,
   tag varchar(50) UNIQUE NOT NULL,
   detail text NOT NULL,
@@ -82,10 +82,15 @@ CREATE TABLE IF NOT EXISTS account_types(
   can_invest boolean NOT NULL DEFAULT FALSE,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT check_can_invest CHECK (NOT (can_invest AND on_budget_account))
+  CONSTRAINT check_can_invest CHECK (
+    NOT (
+      can_invest
+      AND on_budget_account
+    )
+  )
 );
 
-CREATE TABLE IF NOT EXISTS accounts(
+CREATE TABLE IF NOT EXISTS accounts (
   id serial PRIMARY KEY,
   ledger_id integer NOT NULL,
   tag varchar(50) NOT NULL,
@@ -95,16 +100,16 @@ CREATE TABLE IF NOT EXISTS accounts(
   is_closed boolean NOT NULL DEFAULT FALSE,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (ledger_id) REFERENCES ledgers(id) ON DELETE CASCADE,
-  FOREIGN KEY (account_type_id) REFERENCES account_types(id),
-  FOREIGN KEY (currency_id) REFERENCES currencies(id),
+  FOREIGN KEY (ledger_id) REFERENCES ledgers (id) ON DELETE CASCADE,
+  FOREIGN KEY (account_type_id) REFERENCES account_types (id),
+  FOREIGN KEY (currency_id) REFERENCES currencies (id),
   UNIQUE (ledger_id, tag)
 );
 
 -- ================================================
 -- INVESTMENT TRACKING
 -- ================================================
-CREATE TABLE IF NOT EXISTS asset_types(
+CREATE TABLE IF NOT EXISTS asset_types (
   id serial PRIMARY KEY,
   tag varchar(50) UNIQUE NOT NULL,
   detail text NOT NULL,
@@ -112,7 +117,7 @@ CREATE TABLE IF NOT EXISTS asset_types(
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS assets(
+CREATE TABLE IF NOT EXISTS assets (
   id serial PRIMARY KEY,
   ledger_id integer NOT NULL,
   symbol varchar(20) NOT NULL,
@@ -121,27 +126,27 @@ CREATE TABLE IF NOT EXISTS assets(
   currency_id integer NOT NULL,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (ledger_id) REFERENCES ledgers(id) ON DELETE CASCADE,
-  FOREIGN KEY (asset_type_id) REFERENCES asset_types(id),
-  FOREIGN KEY (currency_id) REFERENCES currencies(id),
+  FOREIGN KEY (ledger_id) REFERENCES ledgers (id) ON DELETE CASCADE,
+  FOREIGN KEY (asset_type_id) REFERENCES asset_types (id),
+  FOREIGN KEY (currency_id) REFERENCES currencies (id),
   UNIQUE (ledger_id, symbol),
   UNIQUE (ledger_id, tag)
 );
 
-CREATE TABLE IF NOT EXISTS asset_prices(
+CREATE TABLE IF NOT EXISTS asset_prices (
   asset_id integer NOT NULL,
   date date NOT NULL,
   price numeric(18, 6) NOT NULL,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (asset_id, date),
-  FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
+  FOREIGN KEY (asset_id) REFERENCES assets (id) ON DELETE CASCADE
 );
 
 -- ================================================
 -- CATEGORY MANAGEMENT
 -- ================================================
-CREATE TABLE IF NOT EXISTS category_groups(
+CREATE TABLE IF NOT EXISTS category_groups (
   id serial PRIMARY KEY,
   ledger_id integer NOT NULL,
   tag varchar(255) NOT NULL,
@@ -149,19 +154,19 @@ CREATE TABLE IF NOT EXISTS category_groups(
   is_system boolean NOT NULL DEFAULT FALSE,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (ledger_id) REFERENCES ledgers(id) ON DELETE CASCADE,
+  FOREIGN KEY (ledger_id) REFERENCES ledgers (id) ON DELETE CASCADE,
   UNIQUE (ledger_id, tag),
   UNIQUE (ledger_id, sort_order)
 );
 
-CREATE TABLE IF NOT EXISTS categories(
+CREATE TABLE IF NOT EXISTS categories (
   id serial PRIMARY KEY,
   category_group_id integer NOT NULL,
   tag varchar(255) NOT NULL,
   sort_order integer NOT NULL,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (category_group_id) REFERENCES category_groups(id) ON DELETE CASCADE,
+  FOREIGN KEY (category_group_id) REFERENCES category_groups (id) ON DELETE CASCADE,
   UNIQUE (category_group_id, tag),
   UNIQUE (category_group_id, sort_order)
 );
@@ -169,7 +174,7 @@ CREATE TABLE IF NOT EXISTS categories(
 -- ================================================
 -- GOALS
 -- ================================================
-CREATE TABLE IF NOT EXISTS goal_types(
+CREATE TABLE IF NOT EXISTS goal_types (
   id serial PRIMARY KEY,
   tag varchar(50) UNIQUE NOT NULL,
   detail text NOT NULL,
@@ -178,36 +183,43 @@ CREATE TABLE IF NOT EXISTS goal_types(
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS goals(
+CREATE TABLE IF NOT EXISTS goals (
   category_id integer PRIMARY KEY,
   goal_type_id integer NOT NULL,
   goal_amount numeric(18, 2) NOT NULL,
   goal_month date,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
-  FOREIGN KEY (goal_type_id) REFERENCES goal_types(id),
-  CONSTRAINT check_goal_date_first_of_month CHECK (goal_month IS NULL OR EXTRACT(DAY FROM goal_month) = 1),
+  FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE CASCADE,
+  FOREIGN KEY (goal_type_id) REFERENCES goal_types (id),
+  CONSTRAINT check_goal_date_first_of_month CHECK (
+    goal_month IS NULL
+    OR EXTRACT(
+      DAY
+      FROM
+        goal_month
+    ) = 1
+  ),
   CONSTRAINT check_goal_amount_positive CHECK (goal_amount > 0)
 );
 
 -- ================================================
 -- PAYEES
 -- ================================================
-CREATE TABLE IF NOT EXISTS payees(
+CREATE TABLE IF NOT EXISTS payees (
   id serial PRIMARY KEY,
   ledger_id integer NOT NULL,
   tag varchar(255) NOT NULL,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (ledger_id) REFERENCES ledgers(id) ON DELETE CASCADE,
+  FOREIGN KEY (ledger_id) REFERENCES ledgers (id) ON DELETE CASCADE,
   UNIQUE (ledger_id, tag)
 );
 
 -- ================================================
 -- TRANSACTIONS
 -- ================================================
-CREATE TABLE IF NOT EXISTS transactions(
+CREATE TABLE IF NOT EXISTS transactions (
   id serial PRIMARY KEY,
   account_id integer NOT NULL,
   date date NOT NULL,
@@ -216,49 +228,49 @@ CREATE TABLE IF NOT EXISTS transactions(
   cleared boolean NOT NULL DEFAULT FALSE,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+  FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
   CONSTRAINT check_transactions_amount_zero CHECK (amount <> 0)
 );
 
-CREATE TABLE IF NOT EXISTS payee_transactions(
+CREATE TABLE IF NOT EXISTS payee_transactions (
   transaction_id integer PRIMARY KEY,
   payee_id integer NOT NULL,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
-  FOREIGN KEY (payee_id) REFERENCES payees(id) ON DELETE CASCADE
+  FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE CASCADE,
+  FOREIGN KEY (payee_id) REFERENCES payees (id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS category_transactions(
+CREATE TABLE IF NOT EXISTS category_transactions (
   transaction_id integer NOT NULL,
   category_id integer NOT NULL,
   amount numeric(18, 2) NOT NULL,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (transaction_id, category_id),
-  FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
-  FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
+  FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE CASCADE,
+  FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE CASCADE,
   CONSTRAINT check_category_transactions_amount_zero CHECK (amount <> 0)
 );
 
 -- ================================================
 -- TRANSFERS
 -- ================================================
-CREATE TABLE IF NOT EXISTS transfers(
+CREATE TABLE IF NOT EXISTS transfers (
   from_transaction_id integer UNIQUE NOT NULL,
   to_transaction_id integer UNIQUE NOT NULL,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (from_transaction_id, to_transaction_id),
-  FOREIGN KEY (from_transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
-  FOREIGN KEY (to_transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
+  FOREIGN KEY (from_transaction_id) REFERENCES transactions (id) ON DELETE CASCADE,
+  FOREIGN KEY (to_transaction_id) REFERENCES transactions (id) ON DELETE CASCADE,
   CONSTRAINT check_different_transactions CHECK (from_transaction_id <> to_transaction_id)
 );
 
 -- ================================================
 -- ASSET TRANSACTIONS
 -- ================================================
-CREATE TABLE IF NOT EXISTS asset_transactions(
+CREATE TABLE IF NOT EXISTS asset_transactions (
   transaction_id integer NOT NULL,
   asset_id integer NOT NULL,
   quantity numeric(18, 8) NOT NULL,
@@ -268,32 +280,37 @@ CREATE TABLE IF NOT EXISTS asset_transactions(
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (transaction_id, asset_id),
-  FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
-  FOREIGN KEY (asset_id) REFERENCES assets(id)
+  FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE CASCADE,
+  FOREIGN KEY (asset_id) REFERENCES assets (id)
 );
 
 -- ================================================
 -- BUDGET TRACKING
 -- ================================================
-CREATE TABLE IF NOT EXISTS budgets(
+CREATE TABLE IF NOT EXISTS budgets (
   id serial PRIMARY KEY,
   ledger_id integer NOT NULL,
   budget_month date NOT NULL,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (ledger_id) REFERENCES ledgers(id) ON DELETE CASCADE,
+  FOREIGN KEY (ledger_id) REFERENCES ledgers (id) ON DELETE CASCADE,
   UNIQUE (ledger_id, budget_month),
-  CONSTRAINT check_month_first_day CHECK (EXTRACT(DAY FROM budget_month) = 1)
+  CONSTRAINT check_month_first_day CHECK (
+    EXTRACT(
+      DAY
+      FROM
+        budget_month
+    ) = 1
+  )
 );
 
-CREATE TABLE IF NOT EXISTS category_budgets(
+CREATE TABLE IF NOT EXISTS category_budgets (
   budget_id integer NOT NULL,
   category_id integer NOT NULL,
   budgeted_amount numeric(19, 2) NOT NULL DEFAULT 0,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (budget_id, category_id),
-  FOREIGN KEY (budget_id) REFERENCES budgets(id) ON DELETE CASCADE,
-  FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+  FOREIGN KEY (budget_id) REFERENCES budgets (id) ON DELETE CASCADE,
+  FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE CASCADE
 );
-

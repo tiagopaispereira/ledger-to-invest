@@ -215,7 +215,8 @@ erDiagram
 - **Validation Functions**:
   - `check_account_asset_account_type_can_invest()`: Asset accounts (`is_asset_account = TRUE`) must have `can_invest = TRUE` account type
 - **Triggers**:
-  - Validation trigger with `check_account_asset_account_type_can_invest()` before `insert` or `update` of `is_asset_account, account_type_id` on accounts when `is_asset_account = TRUE`
+  - Validation trigger with `check_account_asset_account_type_can_invest()` before `insert` on accounts when `is_asset_account = TRUE`
+  - Validation trigger with `check_account_asset_account_type_can_invest()` before `update` of `is_asset_account` or `account_type_id` on accounts when `is_asset_account = TRUE` and `is_asset_account` or `account_type_id` changes
   - Validation trigger with `check_account_asset_account_type_can_invest()` before `update` of `can_invest` on account_types when `can_invest` changes from `TRUE` to `FALSE`
   - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
@@ -476,31 +477,37 @@ erDiagram
   - `check_transactions_cleared()`: Validates if transactions can be cleared:
     - All transactions on budget accounts needs be categorized
     - Only transfers are allowed to not have payee
-    - All transactions off budget accounts needs to be a transfer or an asset transaction
 - **Triggers**:
-  - Validation trigger with `check_category_transactions_on_budget_account()` after `insert` or `update` on category_transactions
-  - Validation trigger with `check_category_transactions_on_budget_account()` after `update` of `account_id` on transactions
-  - Validation trigger with `check_category_transactions_on_budget_account()` after `update` of `account_type_id` on accounts
-  - Validation trigger with `check_category_transactions_on_budget_account()` after `update` of `on_budget_account` on account_types
-  - Validation constraint trigger deferrable with `check_category_transactions_amount()` after `insert`, `update` or `delete` on category_transactions
-  - Validation constraint trigger deferrable with `check_category_transactions_amount()` after `update` of `amount` on transactions
-  - Validation constraint trigger deferrable with `check_category_transactions_ledger()` after `insert` or `update` on category_transactions
-  - Validation constraint trigger deferrable with `check_category_transactions_ledger()` after `update` of `account_id` on transactions
-  - Validation constraint trigger deferrable with `check_category_transactions_ledger()` after `update` of `ledger_id` on accounts
-  - Validation constraint trigger deferrable with `check_category_transactions_ledger()` after `update` of `category_group_id` on categories
-  - Validation constraint trigger deferrable with `check_category_transactions_ledger()` after `update` of `ledger_id` on category_groups
-  - Validation constraint trigger deferrable with `check_payee_transactions_ledger()` after `insert` or `update` on payee_transactions
-  - Validation constraint trigger deferrable with `check_payee_transactions_ledger()` after `update` of `account_id` on transactions
-  - Validation constraint trigger deferrable with `check_payee_transactions_ledger()` after `update` of `ledger_id` on accounts
-  - Validation constraint trigger deferrable with `check_payee_transactions_ledger()` after `update` of `ledger_id` on payees
+  - Validation trigger with `check_category_transactions_on_budget_account()` before `insert` on category_transactions
+  - Validation trigger with `check_category_transactions_on_budget_account()` before `update` of `transaction_id` on category_transactions when `transaction_id` changes
+  - Validation trigger with `check_category_transactions_on_budget_account()` before `update` of `account_id` on transactions when `account_id` changes
+  - Validation trigger with `check_category_transactions_on_budget_account()` before `update` of `account_type_id` on accounts when `account_type_id` changes
+  - Validation trigger with `check_category_transactions_on_budget_account()` before `update` of `on_budget_account` on account_types when `on_budget_account` changes from `TRUE` to `FALSE`
+  - Validation constraint trigger deferrable with `check_category_transactions_amount()` after `insert` or `delete` on category_transactions
+  - Validation constraint trigger deferrable with `check_category_transactions_amount()` after `update` of `transaction_id` or `amount` on category_transactions when `transaction_id` or `amount`changes
+  - Validation trigger with `check_category_transactions_amount()` before `update` of `amount` on transactions when `amount` changes
+  - Validation trigger with `check_category_transactions_ledger()` before `insert` on category_transactions
+  - Validation trigger with `check_category_transactions_ledger()` before `update` of `transaction_id` or `category_id` on category_transactions when `transaction_id` or `category_id` changes
+  - Validation trigger with `check_category_transactions_ledger()` before `update` of `account_id` on transactions when `account_id` changes
+  - Validation trigger with `check_category_transactions_ledger()` before `update` of `ledger_id` on accounts when `ledger_id` changes
+  - Validation trigger with `check_category_transactions_ledger()` before `update` of `category_group_id` on categories when `category_group_id` changes
+  - Validation trigger with `check_category_transactions_ledger()` before `update` of `ledger_id` on category_groups when `ledger_id` changes
+  - Validation trigger with `check_payee_transactions_ledger()` before `insert` on payee_transactions
+  - Validation trigger with `check_payee_transactions_ledger()` before `update` of `transaction_id` or `payee_id` on payee_transactions when `transaction_id` or `payee_id` changes
+  - Validation trigger with `check_payee_transactions_ledger()` before `update` of `account_id` on transactions when `account_id` changes
+  - Validation trigger with `check_payee_transactions_ledger()` before `update` of `ledger_id` on accounts when `ledger_id` changes
+  - Validation trigger with `check_payee_transactions_ledger()` before `update` of `ledger_id` on payees when `ledger_id` changes
+  - Validation trigger with `check_transactions_cleared()` before `insert` on transactions
+  - Validation trigger with `check_transactions_cleared()` before `update` of `account_id` or `cleared` on transactions when `cleared = TRUE` and `account_id` or `cleared` changes
+  - Validation trigger with `check_transactions_cleared()` before `update` of `transaction_id` on category_transactions when `transaction_id` changes
+  - Validation trigger with `check_transactions_cleared()` before `delete` on category_transactions
+  - Validation trigger with `check_transactions_cleared()` before `update` of `transaction_id` on payee_transactions when `transaction_id` changes
+  - Validation trigger with `check_transactions_cleared()` before `delete` on payee_transactions
+  - Validation trigger with `check_transactions_cleared()` before `update` of `from_transaction_id` or `to_transaction_id` on transfers when `from_transaction_id` or `to_transaction_id` changes
+  - Validation trigger with `check_transactions_cleared()` before `delete` on transfers
+  - Validation trigger with `check_transactions_cleared()` before `update` of `account_type_id` on accounts when `account_type_id` changes
+  - Validation trigger with `check_transactions_cleared()` before `update` of `on_budget_account` on account_types when `on_budget_account` changes from `FALSE` to `TRUE`
   - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
-  - Validation trigger with `check_transactions_cleared()` after `insert` or `update` on transactions
-  - Validation trigger with `check_transactions_cleared()` after `insert`, `update` or `delete` on category_transactions
-  - Validation trigger with `check_transactions_cleared()` after `insert`, `update` or `delete` on payee_transactions
-  - Validation trigger with `check_transactions_cleared()` after `insert`, `update` or `delete` on transfers
-  - Validation trigger with `check_transactions_cleared()` after `insert`, `update` or `delete` on asset_transactions
-  - Validation trigger with `check_transactions_cleared()` after `update` of `account_type_id` on accounts
-  - Validation trigger with `check_transactions_cleared()` after `update` of `on_budget_account` on account_types
 
 ### Transfer Transaction Structure
 
@@ -546,23 +553,32 @@ erDiagram
   - `check_transfers_without_payee()`: Transfer transactions cannot have payee associations
   - `check_transfers_between_accounts()`: Transfer transactions must be between different accounts
   - `check_transfers_amounts()`: Transfer amounts must sum to zero with proper direction (from negative, to positive)
-  - `check_transfers_categorization()`: Categorization must be consistent across transferred transactions (only for on budget accounts)
+  - `check_transfers_category()`: Categorization must be consistent across transferred transactions (only when both sides have it)
   - `check_transfers_ledger()`: Transfer transactions must be within same ledger
+  - `check_transfers_asset_transaction()`: Transfer can not be an asset transactions
 - **Triggers**:
-  - Validation trigger with `check_transfers_without_payee()` after `insert` or `update` on transfers
-  - Validation trigger with `check_transfers_without_payee()` after `insert` or `update` on payee_transactions
-  - Validation trigger with `check_transfers_between_accounts()` after `insert` or `update` on transfers
-  - Validation trigger with `check_transfers_between_accounts()` after `update` of `account_id` on transactions
-  - Validation trigger with `check_transfers_amounts()` after `insert` or `update` on transfers
-  - Validation trigger with `check_transfers_amounts()` after `update` of `amount` on transactions
-  - Validation constraint trigger deferrable with `check_transfers_categorization()` after `insert` or `update` on transfers
-  - Validation constraint trigger deferrable with `check_transfers_categorization()` after `insert`, `update` or `delete` on category_transactions
-  - Validation trigger with `check_transfers_categorization()` after `update` of `account_id` on transactions
-  - Validation trigger with `check_transfers_categorization()` after `update` of `account_type_id` on accounts
-  - Validation trigger with `check_transfers_categorization()` after `update` of `on_budget_account` on account_types
-  - Validation constraint trigger deferrable with `check_transfers_ledger()` after `insert` or `update` on transfers
-  - Validation constraint trigger deferrable with `check_transfers_ledger()` after `update` of `account_id` on transactions
-  - Validation constraint trigger deferrable with `check_transfers_ledger()` after `update` of `ledger_id` on accounts
+  - Validation trigger with `check_transfers_without_payee()` before `insert` on transfers
+  - Validation trigger with `check_transfers_without_payee()` before `update` of `from_transaction_id` or `to_transaction_id` on transfers when `from_transaction_id` or `to_transaction_id` changes
+  - Validation trigger with `check_transfers_without_payee()` before `insert` on payee_transactions
+  - Validation trigger with `check_transfers_without_payee()` before `update` of `transaction_id` on payee_transactions when `transaction_id` changes
+  - Validation trigger with `check_transfers_between_accounts()` before `insert` on transfers
+  - Validation trigger with `check_transfers_between_accounts()` before `update` of `from_transaction_id` or `to_transaction_id` on transfers when `from_transaction_id` or `to_transaction_id` changes
+  - Validation trigger with `check_transfers_between_accounts()` before `update` of `account_id` on transactions when `account_id` changes
+  - Validation trigger with `check_transfers_amounts()` before `insert` on transfers
+  - Validation trigger with `check_transfers_amounts()` before `update` of `from_transaction_id` or `to_transaction_id` on transfers when `from_transaction_id` or `to_transaction_id` changes
+  - Validation constraint trigger deferrable with `check_transfers_amounts()` after `update` of `amount` on transactions when `amount` changes
+  - Validation trigger with `check_transfers_category()` before `insert` on transfers
+  - Validation trigger with `check_transfers_category()` before `update` of `from_transaction_id` or `to_transaction_id` on transfers when `from_transaction_id` or `to_transaction_id` changes
+  - Validation constraint trigger deferrable with `check_transfers_category()` after `insert` or `delete` on category_transactions
+  - Validation constraint trigger deferrable with `check_transfers_category()` after `update` of `transaction_id`, `category_id` or `amount` on category_transactions when `transaction_id` or `category_id` or `amount` changes
+  - Validation trigger with `check_transfers_ledger()` before `insert` on transfers
+  - Validation trigger with `check_transfers_ledger()` before `update` of `from_transaction_id` or `to_transaction_id` on transfers when `from_transaction_id` or `to_transaction_id` changes
+  - Validation trigger with `check_transfers_ledger()` before `update` of `account_id` on transactions when `account_id` changes
+  - Validation trigger with `check_transfers_ledger()` before `update` of `ledger_id` on accounts when `ledger_id` changes
+  - Validation trigger with `check_transfers_asset_transaction()` before `insert` on transfers
+  - Validation trigger with `check_transfers_asset_transaction()` before `update` of `from_transaction_id` or `to_transaction_id` on transfers when `from_transaction_id` or `to_transaction_id` changes
+  - Validation trigger with `check_transfers_asset_transaction()` before `insert` on asset_transactions
+  - Validation trigger with `check_transfers_asset_transaction()` before `update` of `transaction_id` on asset_transactions when `transaction_id` changes
   - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 - **Impliced Unique Constraint**:
   - With the combination of the two transfers Unique constraints and the trigger on transfers with the `check_transfers_amounts()` function that force the direction of the trasaction, each transaction can only be in one transfer
@@ -620,23 +636,21 @@ erDiagram
   - `asset_transactions(transaction_id, asset_id)` - multiple assets per transaction allowed
 - **Validation Functions**:
   - `check_asset_transactions_account_asset()`: Asset transactions only allowed in asset accounts (`is_asset_account = TRUE`)
-  - `check_asset_transactions_transfers()`: Asset transactions can not be also a transfers
-  - `check_asset_transactions_amount()`: Asset transaction calculation validation:
-    - `ROUND(SUM((quantity × price_per_unit / exchange_rate) + fee), 2) = transaction.amount`
-    - Precision validation to 2 decimal places
+  - `check_asset_transactions_amount()`: Asset transaction calculation validation `ROUND(SUM((quantity × price_per_unit / exchange_rate) + fee), 2) = transaction.amount` (Precision validation to 2 decimal places)
   - `check_asset_transactions_ledger()`: Assets and account transactions must belong to the same ledger
 - **Triggers**:
-  - Validation trigger with `check_asset_transactions_account_asset()` after `insert` or `update` on asset_transactions
-  - Validation trigger with `check_asset_transactions_account_asset()` after `update` of `account_id` on transactions
-  - Validation trigger with `check_asset_transactions_account_asset()` after `update` of `is_asset_account` on accounts
-  - Validation trigger with `check_asset_transactions_transfers()` after `insert` or `update` on asset_transactions
-  - Validation trigger with `check_asset_transactions_transfers()` after `insert` or `update` on transfers
-  - Validation constraint trigger deferrable with `check_asset_transactions_amount()` after `insert`, `update` or `delete` on asset_transactions
-  - Validation constraint trigger deferrable with `check_asset_transactions_amount()` after `update` of `amount` on transactions
-  - Validation constraint trigger deferrable with `check_asset_transactions_ledger()` after `insert` or `update` on asset_transactions
-  - Validation constraint trigger deferrable with `check_asset_transactions_ledger()` after `update` of `account_id` on transactions
-  - Validation constraint trigger deferrable with `check_asset_transactions_ledger()` after `update` of `ledger_id` on accounts
-  - Validation constraint trigger deferrable with `check_asset_transactions_ledger()` after `update` of `ledger_id` on assets
+  - Validation trigger with `check_asset_transactions_account_asset()` before `insert` on asset_transactions
+  - Validation trigger with `check_asset_transactions_account_asset()` before `update` of `transaction_id` on asset_transactions when `transaction_id` changes
+  - Validation trigger with `check_asset_transactions_account_asset()` before `update` of `account_id` on transactions when `account_id` changes
+  - Validation trigger with `check_asset_transactions_account_asset()` before `update` of `is_asset_account` on accounts when `is_asset_account` changes from `TRUE` to `FALSE`
+  - Validation constraint trigger deferrable with `check_asset_transactions_amount()` after `insert` or `delete` on asset_transactions
+  - Validation constraint trigger deferrable with `check_asset_transactions_amount()` after `update` of `transaction_id`, `quantity`, `price_per_unit`, `exchange_rate` or `fee` on asset_transactions when `transaction_id`, `quantity`, `price_per_unit`, `exchange_rate` or `fee`changes
+  - Validation trigger with `check_asset_transactions_amount()` before `update` of `amount` on transactions when `amount` changes
+  - Validation trigger with `check_asset_transactions_ledger()` before `insert` on asset_transactions
+  - Validation trigger with `check_asset_transactions_ledger()` before `update` of `transaction_id` or `asset_id` on asset_transactions when `transaction_id` or `asset_id` changes
+  - Validation trigger with `check_asset_transactions_ledger()` before `update` of `account_id` on transactions when `account_id` changes
+  - Validation trigger with `check_asset_transactions_ledger()` before `update` of `ledger_id` on accounts when `ledger_id` changes
+  - Validation trigger with `check_asset_transactions_ledger()` before `update` of `ledger_id` on assets when `ledger_id` changes
   - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
 ## Budget Network
@@ -690,7 +704,8 @@ erDiagram
 - **Validation Functions**:
   - `check_goal_month_goal_type_has_date()`: Goals must have a target month if goal type requires dates
 - **Triggers**:
-  - Validation trigger with `check_goal_month_goal_type_has_date()` before `insert` or `update` of `goal_month, goal_type_id` on goals when `goal_month IS NULL`
+  - Validation trigger with `check_goal_month_goal_type_has_date()` before `insert` on goals when `goal_month IS NULL`
+  - Validation trigger with `check_goal_month_goal_type_has_date()` before `update` of `goal_month` or `goal_type_id` on goals when `goal_month IS NULL` and `goal_month` or `goal_type_id` changes
   - Validation trigger with `check_goal_month_goal_type_has_date()` after `update` of `has_date` on goal_types when `has_date` changes from `FALSE` to `TRUE`
   - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
@@ -756,26 +771,30 @@ erDiagram
 - **Validation Functions**:
   - `check_category_budgets_ledger()`: Categories and budgets must belong to the same ledger
 - **Triggers**:
-  - Validation constraint trigger deferrable with `check_category_budgets_ledger()` after `insert` or `update` on category_budgets
-  - Validation constraint trigger deferrable with `check_category_budgets_ledger()` after `update` of `ledger_id` on budgets
-  - Validation constraint trigger deferrable with `check_category_budgets_ledger()` after `update` of `category_group_id` on categories
-  - Validation constraint trigger deferrable with `check_category_budgets_ledger()` after `update` of `ledger_id` on category_groups
+  - Validation trigger with `check_category_budgets_ledger()` before `insert` on category_budgets
+  - Validation trigger with `check_category_budgets_ledger()` before `update` of `budget_id` or `category_id` on category_budgets when `budget_id` or `category_id` changes
+  - Validation trigger with `check_category_budgets_ledger()` before `update` of `ledger_id` on budgets when `ledger_id` changes
+  - Validation trigger with `check_category_budgets_ledger()` before `update` of `category_group_id` on categories when `category_group_id` changes
+  - Validation trigger with `check_category_budgets_ledger()` before `update` of `ledger_id` on category_groups when `ledger_id` changes
   - All tables have `update_updated_at` triggers that set `updated_at = CURRENT_TIMESTAMP` on updates
 
 ## Performance Optimization
 
 ### Indexes
 
-The schema includes comprehensive indexing for performance:
+The schema includes comprehensive indexing for validation functions performance:
 
-- **User/Ledger Access**: `users(email)`, `users(username)`, `ledgers(user_id, tag)`
-- **Account Management**: `accounts(ledger_id, tag)`, `accounts(ledger_id, account_type_id)`, `accounts(ledger_id, is_asset_account)` (partial)
-- **Asset Tracking**: `assets(ledger_id, tag)`, `assets(ledger_id, symbol)`
-- **Category Organization**: `category_groups(ledger_id, tag)`, `categories(category_group_id, tag)`
-- **Transaction Queries**: `transactions(account_id, date)`, `transactions(account_id, cleared, date)`
-- **Relationship Lookups**: `payee_transactions(payee_id)`, `category_transactions(category_id)`, `asset_transactions(asset_id)`
-- **Budget Analysis**: `budgets(ledger_id, budget_month)`
-- **Currency Operations**: `currencies(code)`
+- **Account Lookups**: `account_types(id)` (partials with `can_invest = FALSE` and `on_budget_account = FALSE` and `on_budget_account = TRUE`), `accounts(account_type_id, id)`(total and partial with `is_asset_account = TRUE`)
+- **Goal Lookups**: `goal_types(id)` (partial with `has_date = TRUE`), `goals(goal_type_id, category_id)` (partial with `goal_month IS NULL`)
+- **Category Lookups**: `categories(category_group_id, id)`
+- **Transaction Lookups**: `transactions(account_id, id);` (total and partial with `leared = TRUE`), `category_transactions(category_id, transaction_id)`, `payee_transactions(payee_id, transaction_id)`, `transfers(to_transaction_id, from_transaction_id)`, `asset_transactions(asset_id, transaction_id)`
+- **Budget Lookups**: `category_budgets(category_id, budget_id)`
+
+The schema includes comprehensive indexing for API performance:
+
+- **User Access**: `ledgers(user_id)`
+- **Ledger Access**: `accounts(ledger_id)`, `assets(ledger_id)`, `category_groups(ledger_id)`, `payees(ledger_id)`, `budgets(ledger_id)`
+- **Transaction Queries**: `transactions(account_id, date, amount, id)`
 
 ## Data Integrity Summary
 
@@ -784,7 +803,7 @@ The schema enforces data integrity through multiple sophisticated layers:
 1. **Foreign Key Constraints**: Referential integrity with appropriate cascade behaviors
 2. **Unique Constraints**: Business-specific uniqueness rules
 3. **Check Constraints**: Basic data validation rules including positive amounts and date formatting
-4. **Validation Functions**: 16 complex business logic functions with comprehensive error handling
+4. **Validation Functions**: 17 complex business logic functions with comprehensive error handling
 5. **Trigger-Based Validation**:
    - **Regular Triggers**: Immediate validation for basic business rules
    - **CONSTRAINT Triggers (DEFERRABLE)**: Complex validations that can be deferred until transaction commit
